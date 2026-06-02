@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan — Tối ưu hiệu năng EZG Excel</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #fff; --ink: #1f2328; --muted: #656d76;
+    --accent: #1a73e8; --green: #1e8e3e; --amber: #b06000; --red: #d93025;
+    --border: #d0d7de; --code-bg: #f0f2f4;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.65; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.hero { background: linear-gradient(135deg, #1a73e8, #1557b0); color: #fff;
+    border-radius: 16px; padding: 32px 36px; margin-bottom: 28px;
+    box-shadow: 0 6px 24px rgba(26,115,232,.25); }
+  header.hero h1 { margin: 0 0 8px; font-size: 27px; }
+  header.hero p { margin: 0; opacity: .92; font-size: 15px; }
+  .pills { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { background: rgba(255,255,255,.18); padding: 5px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 28px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  h2 { font-size: 21px; margin: 4px 0 14px; display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 16px; margin: 18px 0 6px; color: var(--accent); }
+  .goal { background: var(--code-bg); border-left: 4px solid var(--accent);
+    padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 10px 0 16px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 5px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }
+  .sev { display: inline-block; min-width: 74px; text-align: center; padding: 2px 8px;
+    border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; }
+  .crit { background: var(--red); } .high { background: var(--amber); }
+  .med  { background: var(--green); } .scope { background: var(--muted); }
+  ol.tasks { padding-left: 0; list-style: none; counter-reset: t; }
+  ol.tasks > li { counter-increment: t; position: relative; padding: 14px 16px 14px 56px;
+    border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; background: #fff; }
+  ol.tasks > li::before { content: counter(t); position: absolute; left: 14px; top: 14px;
+    width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  ol.tasks b { font-size: 15px; }
+  ol.tasks small { color: var(--muted); display: block; margin-top: 3px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .ac li { margin-bottom: 4px; }
+  .foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>⚡ Plan tối ưu hiệu năng — EZG Excel</h1>
+  <p>Hết giật khi chọn/kéo ô &amp; giảm tính lại công thức thừa, mà không đổi hành vi nhìn thấy được.</p>
+  <div class="pills">
+    <span class="pill">2026-06-02</span>
+    <span class="pill">9 task · TDD · commit từng bước</span>
+    <span class="pill">Rủi ro thấp · giá trị cao</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2>🎯 Mục tiêu &amp; phạm vi</h2>
+  <div class="goal">Chọn/kéo vùng lớn (vd cả cột 100k ô) mượt; <code>fill</code>/<code>paste</code>
+  chỉ tính lại công thức bị ảnh hưởng; <code>data()</code> không tốn chi phí định dạng điều kiện
+  khi sheet không có rule. <b>Không đổi</b> vùng chọn, highlight, giá trị, undo/redo, conditional formatting.</div>
+  <p class="note"><b>Ngoài phạm vi (tách plan sau — Phase C):</b> đồ thị phụ thuộc dạng vùng
+  (<code>extract_refs</code> không "nở" ô), bỏ <code>_rebuild_deps()</code> quét toàn lưới ở
+  insert/remove/move/sort, cache rule điều kiện. Đây là thay đổi kiến trúc, cần test hồi quy riêng.</p>
+</div>
+
+<div class="card">
+  <h2>🔍 Vấn đề đã phát hiện (review)</h2>
+  <table>
+    <tr><th>#</th><th>Mức</th><th>Chỗ</th><th>Vì sao chậm</th><th>Cách sửa</th></tr>
+    <tr>
+      <td>1</td><td><span class="sev crit">Nặng</span></td>
+      <td><code>_selection_box()</code><br><span class="note">view.py:220</span></td>
+      <td><code>selectedIndexes()</code> tạo 1 QModelIndex cho <i>mỗi</i> ô; gọi lại mỗi lần vẽ &amp; mỗi frame khi kéo.</td>
+      <td>Đọc bounding-box từ <i>range</i> của <code>selection()</code> — O(số vùng).</td>
+    </tr>
+    <tr>
+      <td>2</td><td><span class="sev crit">Nặng</span></td>
+      <td><code>_update_header_highlight()</code><br><span class="note">view.py:397</span></td>
+      <td>Cũng duyệt toàn bộ <code>selectedIndexes()</code> trên mỗi lần đổi vùng chọn.</td>
+      <td>Lấy cột/hàng từ các range thay vì liệt kê ô.</td>
+    </tr>
+    <tr>
+      <td>3</td><td><span class="sev high">Vừa</span></td>
+      <td>4 kết nối signal<br><span class="note">view.py:410</span></td>
+      <td>Một click phát cả 2 signal → nhân đôi repaint + cập nhật header.</td>
+      <td>Gộp vào một slot có tên, dọn lambda.</td>
+    </tr>
+    <tr>
+      <td>4</td><td><span class="sev high">Vừa</span></td>
+      <td><code>fill()</code> / <code>paste_block()</code><br><span class="note">table_model.py:800, 727</span></td>
+      <td><code>_eval_cache.clear()</code> xóa SẠCH → mọi công thức tính lại; còn <code>_rebuild_deps()</code> quét toàn lưới.</td>
+      <td>Vô hiệu hóa cache <i>chọn lọc</i> (ô đổi + ô phụ thuộc) + cập nhật dep cục bộ.</td>
+    </tr>
+    <tr>
+      <td>5</td><td><span class="sev med">Nhỏ</span></td>
+      <td><code>data()</code><br><span class="note">table_model.py:84</span></td>
+      <td>Quét quy tắc điều kiện 2 lần/ô/lần vẽ, kể cả khi không có rule.</td>
+      <td>Guard <code>if self._cond_rules</code> trước khi quét.</td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>🛠️ Các bước thực hiện (9 task)</h2>
+  <ol class="tasks">
+    <li><b>Hạ tầng test Qt</b><small>Tạo <code>tests/conftest.py</code>: fixture <code>qapp</code> chạy headless (<code>QT_QPA_PLATFORM=offscreen</code>).</small></li>
+    <li><b>Tối ưu <code>_selection_box()</code></b><small>Đọc bounding-box từ range. Có test đo: chọn cột 100k ô phải nhanh (cách cũ sẽ vượt ngưỡng).</small></li>
+    <li><b>Tối ưu <code>_update_header_highlight()</code></b><small>Lấy cột/hàng từ range. Có test đúng đắn + đo tốc độ.</small></li>
+    <li><b>Gộp kết nối signal vùng chọn</b><small>4 lambda → 1 slot <code>_on_selection_state_changed</code>.</small></li>
+    <li><b>Helper <code>_recalc_cells(cells)</code></b><small>BFS đồ thị phụ thuộc, xóa cache theo tập ô — dùng chung cho fill/paste.</small></li>
+    <li><b><code>fill()</code> vô hiệu hóa chọn lọc</b><small>Bỏ <code>clear()</code> + <code>_rebuild_deps()</code>; cập nhật dep cục bộ. Test: cache công thức không liên quan còn nguyên.</small></li>
+    <li><b><code>paste_block()</code> vô hiệu hóa chọn lọc</b><small>Chỉ nhánh không mở rộng lưới; nhánh grow giữ nguyên (an toàn).</small></li>
+    <li><b><code>data()</code> guard rule điều kiện</b><small>Bỏ qua quét khi sheet không có conditional formatting.</small></li>
+    <li><b>Kiểm chứng tổng thể + thủ công</b><small>Chạy <code>pytest tests/</code> + mở app kéo cột/Fill Handle kiểm tra mượt.</small></li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>✅ Tiêu chí chấp nhận</h2>
+  <ul class="ac">
+    <li><b>AC1:</b> Toàn bộ test cũ vẫn xanh.</li>
+    <li><b>AC2:</b> Test bounding-box đúng (ô đơn / vùng / nhiều vùng / cả cột) + bài đo tốc độ đạt ngưỡng.</li>
+    <li><b>AC3:</b> <code>fill</code>/<code>paste</code> giữ cache công thức không liên quan, nhưng xóa cache công thức phụ thuộc; giá trị đúng.</li>
+    <li><b>AC4:</b> Thủ công: kéo cột / Fill Handle mượt; conditional formatting &amp; undo/redo đúng.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>⚠️ Rủi ro &amp; giảm thiểu</h2>
+  <table>
+    <tr><th>Rủi ro</th><th>Giảm thiểu</th></tr>
+    <tr><td><code>selection()</code> rỗng</td><td>Kiểm tra <code>is None / isEmpty()</code> trước, giữ nhánh fallback theo <code>currentIndex()</code>.</td></tr>
+    <tr><td>Bỏ sót ô phụ thuộc → hiện giá trị cũ</td><td>Dùng đúng đồ thị <code>_dependents</code> (BFS) như <code>_recalculate</code> hiện có; test AC3 chốt.</td></tr>
+    <tr><td>Hồi quy khó truy vết</td><td>Mỗi sửa đổi nhỏ, commit riêng → dễ <code>git bisect</code>.</td></tr>
+  </table>
+</div>
+
+<p class="foot">Bản chi tiết để thực thi: <code>docs/plans/2026-06-02-performance-optimization.md</code></p>
+
+</div>
+</body>
+</html>

@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction, QActionGroup, QColor, QFont, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QColor, QFont, QIcon, QKeySequence, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -174,6 +174,7 @@ class MainWindow(QMainWindow):
         self._find_dialog: QDialog | None = None
         self._actions: dict[str, QAction] = {}  # phím tắt tùy chỉnh
         self._updating_toolbar = False
+        self._fx_picking = False  # True khi đang soạn công thức (bấm ô chèn ref)
         self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
 
         if os.path.exists(icon_path()):
@@ -307,10 +308,17 @@ class MainWindow(QMainWindow):
         self.view.refresh_spans()
         self.view.setSelectionMode(QTableView.ContiguousSelection)
         self.view.horizontalHeader().setSectionsClickable(True)
+        self.view.verticalHeader().setSectionsClickable(True)
         self.view.horizontalHeader().sectionDoubleClicked.connect(self._sort_by_header)
+        # Bấm tiêu đề cột/hàng -> bôi đen cả cột/hàng đó (như Excel).
+        self.view.horizontalHeader().sectionClicked.connect(self.view.selectColumn)
+        self.view.verticalHeader().sectionClicked.connect(self.view.selectRow)
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._show_context_menu)
         self.view.horizontalHeader().filterClicked.connect(self._open_filter_dialog)
+        # Soạn công thức: bấm ô để chèn tham chiếu (như Excel).
+        self.view.formula_pick_active = lambda: self._fx_picking
+        self.view.cellPicked.connect(self._insert_cell_ref)
         self._wire_selection()
         layout.addWidget(self.view, 1)
 
@@ -433,11 +441,15 @@ class MainWindow(QMainWindow):
         self.size_combo.currentTextChanged.connect(self._on_size_changed)
         sec_font.add_widget(self.size_combo)
 
-        # B / I / U / S
-        self.btn_bold   = self._ribbon_toggle(sec_font, "bold",      tr("bold"),      bold=True)
-        self.btn_italic = self._ribbon_toggle(sec_font, "italic",     tr("italic"),    italic=True)
-        self.btn_uline  = self._ribbon_toggle(sec_font, "underline",  tr("underline"), underline=True)
-        self.btn_strike = self._ribbon_toggle(sec_font, "strike",     tr("strike"),    strike=True)
+        # Ép popup combo nền trắng chữ đen (tránh Windows dark mode làm đen xì).
+        for _combo in (self.font_combo, self.size_combo):
+            self._force_light_popup(_combo)
+
+        # B / I / U / S — hiện chữ cái có style
+        self.btn_bold   = self._ribbon_toggle(sec_font, "B", tr("bold"),      "bold",      bold=True)
+        self.btn_italic = self._ribbon_toggle(sec_font, "I", tr("italic"),    "italic",    italic=True)
+        self.btn_uline  = self._ribbon_toggle(sec_font, "U", tr("underline"), "underline", underline=True)
+        self.btn_strike = self._ribbon_toggle(sec_font, "S", tr("strike"),    "strike",    strike=True)
         # QAction aliases để menu/shortcut vẫn hoạt động
         self.act_bold   = self.btn_bold.defaultAction()
         self.act_italic = self.btn_italic.defaultAction()
@@ -524,6 +536,29 @@ class MainWindow(QMainWindow):
 
     # ---- Ribbon helpers ----
 
+    def _force_light_popup(self, combo) -> None:
+        """Ép danh sách thả xuống của combo nền trắng chữ đen.
+
+        QSS đặt ở ancestor đôi khi không tới popup (là cửa sổ top-level riêng),
+        và Windows dark mode làm nó đen xì. Đặt thẳng stylesheet + palette lên
+        view của combo để chắc chắn áp dụng.
+        """
+        view = combo.view()
+        view.setStyleSheet(
+            "background:#ffffff; color:#1c1c1c;"
+            "selection-background-color:#217346; selection-color:#ffffff;"
+        )
+        view.setAutoFillBackground(True)
+        pal = view.palette()
+        pal.setColor(QPalette.Base, QColor("#ffffff"))
+        pal.setColor(QPalette.Text, QColor("#1c1c1c"))
+        pal.setColor(QPalette.Highlight, QColor("#217346"))
+        pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        view.setPalette(pal)
+        # Cửa sổ popup chứa view cũng cần palette sáng.
+        if view.window() is not None:
+            view.window().setPalette(pal)
+
     def _ribbon_btn(self, section: "_RibbonSection", icon_name: str, tip: str, slot) -> QToolButton:
         """Nút đơn trong ribbon."""
         btn = QToolButton()
@@ -533,16 +568,32 @@ class MainWindow(QMainWindow):
         section.add_widget(btn)
         return btn
 
-    def _ribbon_toggle(self, section: "_RibbonSection", icon_name: str, tip: str, **attr) -> QToolButton:
-        """Nút toggle (bold/italic/underline) trong ribbon."""
+    def _ribbon_toggle(self, section: "_RibbonSection", letter: str, tip: str,
+                       style: str, **attr) -> QToolButton:
+        """Nút toggle định dạng chữ: hiện 1 chữ cái có style (B đậm, I nghiêng,
+        U gạch chân, S gạch ngang) thay vì cả từ."""
         btn = QToolButton()
-        btn.setIcon(make_icon(icon_name))
+        btn.setText(letter)
+        btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        f = QFont()
+        f.setPointSize(12)
+        if style == "bold":
+            f.setBold(True)
+        elif style == "italic":
+            f.setItalic(True)
+        elif style == "underline":
+            f.setUnderline(True)
+        elif style == "strike":
+            f.setStrikeOut(True)
+        btn.setFont(f)
         btn.setToolTip(tip)
         btn.setCheckable(True)
         key = next(iter(attr))
-        act = QAction(tip, self, checkable=True)
+        act = QAction(letter, self, checkable=True)  # text = chữ cái, không phải cả từ
+        act.setToolTip(tip)
         act.toggled.connect(lambda checked: self._apply_format(**{key: checked}))
         btn.setDefaultAction(act)
+        btn.setToolButtonStyle(Qt.ToolButtonTextOnly)  # giữ chỉ-chữ sau setDefaultAction
         section.add_widget(btn)
         return btn
 
@@ -1019,10 +1070,23 @@ class MainWindow(QMainWindow):
         """Khi user bắt đầu gõ vào formula bar, hiện nút ✕ và ✓."""
         self.btn_cancel_edit.setVisible(True)
         self.btn_accept_edit.setVisible(True)
+        # Bật chế độ chọn ô chèn ref khi nội dung là công thức (bắt đầu '=').
+        self._fx_picking = text.startswith("=")
 
     def _hide_formula_buttons(self) -> None:
         self.btn_cancel_edit.setVisible(False)
         self.btn_accept_edit.setVisible(False)
+        self._fx_picking = False
+
+    def _insert_cell_ref(self, row: int, col: int) -> None:
+        """Chèn tham chiếu ô (vd 'B3') vào formula bar tại vị trí con trỏ."""
+        ref = formula.col_index_to_letters(col) + str(row + 1)
+        le = self.formula_edit
+        pos = le.cursorPosition()
+        text = le.text()
+        le.setText(text[:pos] + ref + text[pos:])
+        le.setCursorPosition(pos + len(ref))
+        le.setFocus()
 
     def _cancel_formula_edit(self) -> None:
         """Hủy sửa — khôi phục nội dung cũ."""

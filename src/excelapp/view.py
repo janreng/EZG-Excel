@@ -161,9 +161,14 @@ class CellDelegate(QStyledItemDelegate):
 
 
 class SpreadsheetView(QTableView):
+    # Phát khi đang soạn công thức và người dùng bấm 1 ô để chèn tham chiếu.
+    cellPicked = Signal(int, int)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
+        # Callable trả True khi đang soạn công thức (bật chế độ chọn ô chèn ref).
+        self.formula_pick_active = None
         self._h_header = FilterHeaderView(self)
         self._v_header = RowHeaderView(self)
         self.setHorizontalHeader(self._h_header)
@@ -256,6 +261,14 @@ class SpreadsheetView(QTableView):
 
     # ------------------------------------------------------------ chuột
     def mousePressEvent(self, event):
+        # Đang soạn công thức -> bấm ô chèn tham chiếu (không đổi vùng chọn).
+        if (event.button() == Qt.LeftButton and self.formula_pick_active
+                and self.formula_pick_active()):
+            idx = self.indexAt(event.position().toPoint())
+            if idx.isValid():
+                self.cellPicked.emit(idx.row(), idx.column())
+                event.accept()
+                return
         handle = self._handle_rect()
         if (
             event.button() == Qt.LeftButton

@@ -6,6 +6,21 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.11.2] - 2026-06-02
+
+### Thêm mới
+- **Soạn công thức kiểu Excel**: khi đang gõ công thức ở thanh công thức (bắt đầu
+  bằng `=`), bấm vào ô để chèn tham chiếu ô đó (vd `=D3+B1` bằng cách bấm chuột).
+- **Bấm tiêu đề cột/hàng** để bôi đen cả cột/hàng đó.
+
+### Sửa lỗi
+- **Dropdown nền đen**: ép giao diện nền sáng (không chạy theo dark mode Windows)
+  + nền trắng cho popup chọn phông/cỡ chữ.
+
+### Thay đổi
+- Nút định dạng chữ hiển thị **chữ cái có style** (B đậm, I nghiêng, U gạch chân,
+  S gạch ngang) thay vì cả từ.
+
 ## [0.11.1] - 2026-06-02
 
 ### Cải thiện (hiệu năng)
