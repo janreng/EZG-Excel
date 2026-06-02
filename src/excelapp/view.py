@@ -151,6 +151,28 @@ class CellDelegate(QStyledItemDelegate):
         option.state &= ~QStyle.State_Selected
         option.state &= ~QStyle.State_HasFocus
         super().paint(painter, option, index)
+        self._paint_borders(painter, option, index)
+
+    def _paint_borders(self, painter, option, index) -> None:
+        model = self._view.model()
+        if model is None:
+            return
+        border = model.get_format(index.row(), index.column()).get("border")
+        if not border:
+            return
+        r = option.rect
+        painter.save()
+        for side, color in border.items():
+            painter.setPen(QPen(QColor(color), 1))
+            if side == "top":
+                painter.drawLine(r.topLeft(), r.topRight())
+            elif side == "bottom":
+                painter.drawLine(r.bottomLeft(), r.bottomRight())
+            elif side == "left":
+                painter.drawLine(r.topLeft(), r.bottomLeft())
+            elif side == "right":
+                painter.drawLine(r.topRight(), r.bottomRight())
+        painter.restore()
 
 
 class SpreadsheetView(QTableView):

@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import datetime
 import functools
 import re
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 
 from . import formula
 
 # Các thuộc tính định dạng hợp lệ cho một ô.
-_FORMAT_KEYS = ("font", "size", "bold", "italic", "halign", "valign", "wrap")
+#   font, size, bold, italic, underline, strike — chữ
+#   halign, valign, wrap                        — căn lề / xuống dòng
+#   bg, color                                   — màu nền / màu chữ (hex)
+#   border                                      — dict {top,bottom,left,right}
+#   number_format                               — mã định dạng số kiểu Excel
+_FORMAT_KEYS = (
+    "font", "size", "bold", "italic", "underline", "strike",
+    "halign", "valign", "wrap", "bg", "color", "border", "number_format",
+)
 
 _HALIGN = {
     "left": Qt.AlignLeft,
@@ -68,6 +77,12 @@ class SpreadsheetModel(QAbstractTableModel):
             return int(self._alignment(row, col))
         if role == Qt.FontRole:
             return self._font(row, col)
+        if role == Qt.BackgroundRole:
+            bg = self._fmt.get((row, col), {}).get("bg")
+            return QColor(bg) if bg else None
+        if role == Qt.ForegroundRole:
+            color = self._fmt.get((row, col), {}).get("color")
+            return QColor(color) if color else None
         return None
 
     def _alignment(self, row: int, col: int):
@@ -86,11 +101,12 @@ class SpreadsheetModel(QAbstractTableModel):
             return None
         # Khóa chỉ gồm thuộc tính ảnh hưởng tới font -> nhiều ô cùng style
         # chia sẻ một QFont đã tạo sẵn, tránh cấp phát mỗi lần repaint.
-        key = (fmt.get("font"), fmt.get("size"), bool(fmt.get("bold")), bool(fmt.get("italic")))
+        key = (fmt.get("font"), fmt.get("size"), bool(fmt.get("bold")),
+               bool(fmt.get("italic")), bool(fmt.get("underline")), bool(fmt.get("strike")))
         if key in self._font_cache:
             return self._font_cache[key]
-        family, size, bold, italic = key
-        if not (family or size or bold or italic):
+        family, size, bold, italic, underline, strike = key
+        if not (family or size or bold or italic or underline or strike):
             self._font_cache[key] = None
             return None
         f = QFont()
@@ -100,6 +116,8 @@ class SpreadsheetModel(QAbstractTableModel):
             f.setPointSize(int(size))
         f.setBold(bold)
         f.setItalic(italic)
+        f.setUnderline(underline)
+        f.setStrikeOut(strike)
         self._font_cache[key] = f
         return f
 
@@ -109,6 +127,11 @@ class SpreadsheetModel(QAbstractTableModel):
 
     def _display_value(self, row: int, col: int) -> str:
         value = self._cell_value(row, col)
+        code = self._fmt.get((row, col), {}).get("number_format")
+        if code:
+            shown = _apply_number_format(value, code)
+            if shown is not None:
+                return shown
         return _format(value)
 
     def _cell_value(self, row: int, col: int):
@@ -378,6 +401,54 @@ class SpreadsheetModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(top, left), self.index(bottom, right), []
         )
+
+    def set_border(self, box: tuple[int, int, int, int], kind: str,
+                   color: str = "#000000") -> None:
+        """Đặt viền cho vùng. kind: all/outer/top/bottom/left/right/none.
+
+        Viền lưu trong fmt['border'] = {side: color_hex}. Mỗi ô chỉ nhận cạnh
+        phù hợp với vị trí của nó trong vùng (vd 'outer' chỉ viền mép ngoài).
+        """
+        top, left, bottom, right = box
+        cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
+        for r in range(top, bottom + 1):
+            for c in range(left, right + 1):
+                old = dict(self._fmt.get((r, c), {}))
+                new = dict(old)
+                b = dict(new.get("border") or {})
+                if kind == "none":
+                    b = {}
+                elif kind == "all":
+                    b = {s: color for s in ("top", "bottom", "left", "right")}
+                elif kind == "outer":
+                    if r == top:
+                        b["top"] = color
+                    if r == bottom:
+                        b["bottom"] = color
+                    if c == left:
+                        b["left"] = color
+                    if c == right:
+                        b["right"] = color
+                elif kind in ("top", "bottom", "left", "right"):
+                    edge = {"top": r == top, "bottom": r == bottom,
+                            "left": c == left, "right": c == right}[kind]
+                    if edge:
+                        b[kind] = color
+                if b:
+                    new["border"] = b
+                else:
+                    new.pop("border", None)
+                if new != old:
+                    cell_fmts[(r, c)] = (old, new)
+        if not cell_fmts:
+            return
+        self._push_undo(("fmt", cell_fmts))
+        for (r, c), (_, new_fmt) in cell_fmts.items():
+            if new_fmt:
+                self._fmt[(r, c)] = new_fmt
+            else:
+                self._fmt.pop((r, c), None)
+        self.dataChanged.emit(self.index(top, left), self.index(bottom, right), [])
 
     def get_format(self, row: int, col: int) -> dict:
         """Định dạng của một ô (rỗng nếu mặc định)."""
@@ -684,6 +755,53 @@ def _format(value) -> str:
             return str(int(value))
         return f"{value:g}"
     return str(value)
+
+
+# Các mã định dạng ngày/giờ -> chuỗi strftime tương ứng.
+_DATE_CODES = {
+    "dd/mm/yyyy": "%d/%m/%Y",
+    "mm/dd/yyyy": "%m/%d/%Y",
+    "yyyy-mm-dd": "%Y-%m-%d",
+    "hh:mm:ss": "%H:%M:%S",
+    "hh:mm": "%H:%M",
+}
+_EXCEL_EPOCH = datetime.datetime(1899, 12, 30)
+# Phần số trong mã định dạng (vd '#,##0.00') để tách prefix/suffix (tiền tệ...).
+_NUM_PAT = re.compile(r"[#0][#0,]*(\.[0#]+)?")
+
+
+def _apply_number_format(value, code: str):
+    """Áp mã định dạng số kiểu Excel lên ``value``.
+
+    Trả về chuỗi đã định dạng, hoặc ``None`` nếu không áp dụng được
+    (giá trị không phải số -> để hàm gọi dùng _format mặc định).
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    if code in _DATE_CODES:
+        try:
+            dt = _EXCEL_EPOCH + datetime.timedelta(days=float(value))
+            return dt.strftime(_DATE_CODES[code])
+        except (OverflowError, ValueError):
+            return None
+    percent = "%" in code
+    body = code.replace("%", "")
+    v = value * 100 if percent else value
+    if "E" in body.upper():  # khoa học
+        decimals = body.upper().split("E")[0].split(".")
+        nd = decimals[1].count("0") if len(decimals) > 1 else 2
+        return format(v, f".{nd}E") + ("%" if percent else "")
+    m = _NUM_PAT.search(body)
+    if not m:
+        return _format(value)
+    prefix, suffix = body[:m.start()], body[m.end():]
+    numpart = m.group()
+    thousands = "," in numpart.split(".")[0]
+    decimals = numpart.split(".", 1)[1].count("0") if "." in numpart else 0
+    spec = f"{',' if thousands else ''}.{decimals}f"
+    sign = "-" if v < 0 else ""
+    core = format(abs(v), spec)
+    return f"{sign}{prefix}{core}{suffix}" + ("%" if percent else "")
 
 
 def _looks_numeric(value) -> bool:

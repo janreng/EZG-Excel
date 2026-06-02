@@ -7,10 +7,11 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QColor, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -384,13 +385,44 @@ class MainWindow(QMainWindow):
         self.size_combo.currentTextChanged.connect(self._on_size_changed)
         sec_font.add_widget(self.size_combo)
 
-        # B / I / U
+        # B / I / U / S
         self.btn_bold   = self._ribbon_toggle(sec_font, "bold",      tr("bold"),      bold=True)
         self.btn_italic = self._ribbon_toggle(sec_font, "italic",     tr("italic"),    italic=True)
         self.btn_uline  = self._ribbon_toggle(sec_font, "underline",  tr("underline"), underline=True)
+        self.btn_strike = self._ribbon_toggle(sec_font, "strike",     tr("strike"),    strike=True)
         # QAction aliases để menu/shortcut vẫn hoạt động
         self.act_bold   = self.btn_bold.defaultAction()
         self.act_italic = self.btn_italic.defaultAction()
+
+        # Màu chữ / màu nền (mở hộp chọn màu)
+        self.btn_fontcolor = self._ribbon_btn(
+            sec_font, "font_color", tr("font_color"), lambda: self._pick_color("color"))
+        self.btn_fillcolor = self._ribbon_btn(
+            sec_font, "fill_color", tr("fill_color"), lambda: self._pick_color("bg"))
+
+        # ---- Section: Viền & Số ----
+        sec_cell = self._ribbon.add_section(tr("sec_cell"))
+        self.btn_border = self._ribbon_menu(
+            sec_cell, "borders", tr("borders_tip"),
+            [("border_all", lambda: self._apply_border("all")),
+             ("border_outer", lambda: self._apply_border("outer")),
+             ("border_top", lambda: self._apply_border("top")),
+             ("border_bottom", lambda: self._apply_border("bottom")),
+             ("border_left", lambda: self._apply_border("left")),
+             ("border_right", lambda: self._apply_border("right")),
+             ("border_none", lambda: self._apply_border("none"))],
+        )
+        self.btn_numfmt = self._ribbon_menu(
+            sec_cell, "number_format", tr("number_format_tip"),
+            [("numfmt_general", lambda: self._apply_format(number_format=None)),
+             ("numfmt_number", lambda: self._apply_format(number_format="#,##0.00")),
+             ("numfmt_percent", lambda: self._apply_format(number_format="0%")),
+             ("numfmt_vnd", lambda: self._apply_format(number_format="#,##0₫")),
+             ("numfmt_usd", lambda: self._apply_format(number_format="$#,##0.00")),
+             ("numfmt_date", lambda: self._apply_format(number_format="dd/mm/yyyy")),
+             ("numfmt_time", lambda: self._apply_format(number_format="hh:mm:ss")),
+             ("numfmt_scientific", lambda: self._apply_format(number_format="0.00E+00"))],
+        )
 
         # ---- Section: Căn lề ----
         sec_align = self._ribbon.add_section(tr("sec_alignment"))
@@ -482,6 +514,38 @@ class MainWindow(QMainWindow):
     def _apply_dropdown(self, key, value, btn, icon) -> None:
         self._apply_format(**{key: value})
         btn.setIcon(make_icon(icon))
+
+    def _ribbon_menu(self, section: "_RibbonSection", icon_name: str, tip: str,
+                     options: list) -> QToolButton:
+        """Nút mở menu chữ (viền, định dạng số...). options: [(label_key, slot)]."""
+        btn = QToolButton()
+        btn.setPopupMode(QToolButton.InstantPopup)
+        btn.setIcon(make_icon(icon_name))
+        btn.setToolTip(tip)
+        menu = QMenu(btn)
+        for label_key, slot in options:
+            act = menu.addAction(tr(label_key))
+            act.triggered.connect(lambda _c=False, s=slot: s())
+        btn.setMenu(menu)
+        section.add_widget(btn)
+        return btn
+
+    def _pick_color(self, key: str) -> None:
+        """Mở hộp chọn màu cho 'color' (màu chữ) hoặc 'bg' (màu nền)."""
+        box = self._selection_box()
+        if box is None:
+            return
+        cur = self.model.get_format(box[0], box[1]).get(key)
+        title = tr("font_color") if key == "color" else tr("fill_color")
+        color = QColorDialog.getColor(QColor(cur) if cur else QColor("#000000"), self, title)
+        if color.isValid():
+            self._apply_format(**{key: color.name()})
+
+    def _apply_border(self, kind: str) -> None:
+        box = self._selection_box()
+        if box is None:
+            return
+        self.model.set_border(box, kind)
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
         """Legacy helper — chỉ còn dùng cho menu action."""
@@ -778,6 +842,8 @@ class MainWindow(QMainWindow):
             self.size_combo.setCurrentText(str(fmt.get("size") or 10))
             self.act_bold.setChecked(bool(fmt.get("bold")))
             self.act_italic.setChecked(bool(fmt.get("italic")))
+            self.btn_uline.defaultAction().setChecked(bool(fmt.get("underline")))
+            self.btn_strike.defaultAction().setChecked(bool(fmt.get("strike")))
             self._sync_btn(self.halign_btn, fmt.get("halign"))
             self._sync_btn(self.valign_btn, fmt.get("valign"))
             self._sync_btn(self.wrap_btn, fmt.get("wrap") or "overflow")
