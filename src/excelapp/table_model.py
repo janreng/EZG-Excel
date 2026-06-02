@@ -82,15 +82,17 @@ class SpreadsheetModel(QAbstractTableModel):
         if role == Qt.FontRole:
             return self._font(row, col)
         if role == Qt.BackgroundRole:
-            rule = self._matching_rule(row, col)
-            if rule and rule.get("bg"):
-                return QColor(rule["bg"])
+            if self._cond_rules:
+                rule = self._matching_rule(row, col)
+                if rule and rule.get("bg"):
+                    return QColor(rule["bg"])
             bg = self._fmt.get((row, col), {}).get("bg")
             return QColor(bg) if bg else None
         if role == Qt.ForegroundRole:
-            rule = self._matching_rule(row, col)
-            if rule and rule.get("color"):
-                return QColor(rule["color"])
+            if self._cond_rules:
+                rule = self._matching_rule(row, col)
+                if rule and rule.get("color"):
+                    return QColor(rule["color"])
             color = self._fmt.get((row, col), {}).get("color")
             return QColor(color) if color else None
         return None
@@ -282,6 +284,26 @@ class SpreadsheetModel(QAbstractTableModel):
         tl = self.index(min(rows_), min(cols_))
         br = self.index(max(rows_), max(cols_))
         self.dataChanged.emit(tl, br, [Qt.DisplayRole])
+
+    def _recalc_cells(self, cells) -> set[tuple[int, int]]:
+        """Vô hiệu cache của ``cells`` + mọi ô phụ thuộc (BFS ngược).
+
+        Trả về tập 'dirty' đã bị xóa cache. KHÔNG emit dataChanged (bên gọi tự
+        quyết định vùng vẽ lại). Dùng cho thao tác đổi NHIỀU ô (fill/paste).
+        """
+        dirty: set[tuple[int, int]] = set()
+        queue = list(cells)
+        while queue:
+            cell = queue.pop()
+            if cell in dirty:
+                continue
+            dirty.add(cell)
+            for dep in self._dependents.get(cell, ()):
+                if dep not in dirty:
+                    queue.append(dep)
+        for cell in dirty:
+            self._eval_cache.pop(cell, None)
+        return dirty
 
     def flags(self, index: QModelIndex):
         if not index.isValid():
@@ -722,15 +744,22 @@ class SpreadsheetModel(QAbstractTableModel):
         # Fill in new values for delta
         changes = [(r, c, old, self._data[r][c]) for r, c, old, _ in changes]
         self._push_undo(("cells", changes))
-        self._rebuild_deps()
         if grew:
+            # Đổi kích thước -> rebuild deps + clear toàn bộ là an toàn nhất.
+            self._rebuild_deps()
             self._eval_cache.clear()
             self.endResetModel()
         else:
-            self._eval_cache.clear()
+            # Cập nhật deps cục bộ + vô hiệu cache chọn lọc.
+            for r, c, _old, _new in changes:
+                self._update_deps(r, c)
+            changed_cells = {(r, c) for r, c, _o, _n in changes}
+            dirty = self._recalc_cells(changed_cells)
+            rows_ = [top, top + rows - 1] + [r for r, _ in dirty]
+            cols_ = [left, left + cols - 1] + [c for _, c in dirty]
             self.dataChanged.emit(
-                self.index(top, left),
-                self.index(top + rows - 1, left + cols - 1),
+                self.index(min(rows_), min(cols_)),
+                self.index(max(rows_), max(cols_)),
                 [Qt.DisplayRole, Qt.EditRole],
             )
 
@@ -796,10 +825,19 @@ class SpreadsheetModel(QAbstractTableModel):
 
         self._push_undo(("cells", changes))
 
-        self._rebuild_deps()
-        self._eval_cache.clear()
+        # Cập nhật deps cục bộ cho các ô vừa ghi (không quét toàn lưới).
+        for r, c, _old, _new in changes:
+            self._update_deps(r, c)
+        # Vô hiệu cache chọn lọc: ô đã đổi + ô phụ thuộc.
+        changed_cells = {(r, c) for r, c, _o, _n in changes}
+        dirty = self._recalc_cells(changed_cells)
+        # Vẽ lại bounding-box phủ vùng đích + các ô phụ thuộc ngoài vùng.
+        rows_ = [dt, db] + [r for r, _ in dirty]
+        cols_ = [dl, dr] + [c for _, c in dirty]
         self.dataChanged.emit(
-            self.index(dt, dl), self.index(db, dr), [Qt.DisplayRole, Qt.EditRole]
+            self.index(min(rows_), min(cols_)),
+            self.index(max(rows_), max(cols_)),
+            [Qt.DisplayRole, Qt.EditRole],
         )
 
     def _fill_value(self, source: list[str], pos: int, axis: str) -> str:
