@@ -6,6 +6,16 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.11.1] - 2026-06-02
+
+### Cải thiện (hiệu năng)
+- Header highlight (sáng cột/hàng đang chọn) tính theo *range* thay vì liệt kê
+  từng ô — chọn cả cột/hàng không còn khựng.
+- `fill` (kéo-điền) và `paste` chỉ vô hiệu cache công thức bị ảnh hưởng (ô đổi +
+  ô phụ thuộc) thay vì tính lại toàn bộ công thức của sheet.
+- `data()` bỏ qua quét định dạng có điều kiện khi sheet không có quy tắc nào.
+- Gộp tín hiệu selection vào một slot (giảm repaint thừa mỗi lần chọn).
+
 ## [0.11.0] - 2026-06-02
 
 ### Thay đổi
