@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
     QKeySequenceEdit,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -27,6 +30,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTableView,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -40,6 +44,28 @@ from .table_model import SpreadsheetModel
 from .view import SpreadsheetView
 
 
+def _natural_key(s: str):
+    """Khóa sắp xếp tự nhiên: số trong chuỗi so sánh theo giá trị số."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+
+
+class _IoWorker(QThread):
+    """Chạy io_utils.load_file / save_file trên thread riêng, không chặn UI."""
+
+    finished: Signal = Signal(object)  # kết quả (rows khi load, None khi save)
+    failed: Signal = Signal(str)       # thông báo lỗi
+
+    def __init__(self, fn, parent=None):
+        super().__init__(parent)
+        self._fn = fn
+
+    def run(self):
+        try:
+            self.finished.emit(self._fn())
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -51,6 +77,7 @@ class MainWindow(QMainWindow):
         self._find_dialog: QDialog | None = None
         self._actions: dict[str, QAction] = {}  # phím tắt tùy chỉnh
         self._updating_toolbar = False
+        self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
 
         if os.path.exists(icon_path()):
             self.setWindowIcon(QIcon(icon_path()))
@@ -118,6 +145,7 @@ class MainWindow(QMainWindow):
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._show_context_menu)
         self.view.selectionModel().currentChanged.connect(self._on_current_changed)
+        self.view.horizontalHeader().filterClicked.connect(self._open_filter_dialog)
         layout.addWidget(self.view)
 
         self.freeze = FreezeManager(self.view)
@@ -157,23 +185,53 @@ class MainWindow(QMainWindow):
         self.act_italic = self._toolbar_toggle(tb, "I", tr("italic"), italic=True)
         tb.addSeparator()
 
-        # Canh ngang (loại trừ lẫn nhau, cho phép bỏ chọn hết).
-        self.halign_group = QActionGroup(self)
-        self.halign_group.setExclusionPolicy(QActionGroup.ExclusionPolicy.ExclusiveOptional)
-        self.act_left = self._toolbar_align(tb, "", tr("align_left"), self.halign_group, "align_left", halign="left")
-        self.act_center = self._toolbar_align(tb, "", tr("align_center"), self.halign_group, "align_center", halign="center")
-        self.act_right = self._toolbar_align(tb, "", tr("align_right"), self.halign_group, "align_right", halign="right")
+        # Dropdown canh ngang / canh dọc / xuống dòng (kiểu Google Sheets).
+        self.halign_btn = self._dropdown(
+            tb, tr("halign_tip"), "halign", "align_left",
+            [("align_left", "align_left", "left"),
+             ("align_center", "align_center", "center"),
+             ("align_right", "align_right", "right")],
+        )
+        self.valign_btn = self._dropdown(
+            tb, tr("valign_tip"), "valign", "valign_bottom",
+            [("valign_top", "valign_top", "top"),
+             ("valign_middle", "valign_middle", "middle"),
+             ("valign_bottom", "valign_bottom", "bottom")],
+        )
+        self.wrap_btn = self._dropdown(
+            tb, tr("wrap_tip"), "wrap", "wrap_overflow",
+            [("wrap_overflow", "wrap_overflow", "overflow"),
+             ("wrap_text", "wrap_wrap", "wrap"),
+             ("wrap_clip", "wrap_clip", "clip")],
+        )
         tb.addSeparator()
+        self.act_filter = QAction(make_icon("filter"), tr("filter_tip"), self)
+        self.act_filter.setCheckable(True)
+        self.act_filter.toggled.connect(self.toggle_filter)
+        tb.addAction(self.act_filter)
 
-        # Canh dọc.
-        self.valign_group = QActionGroup(self)
-        self.valign_group.setExclusionPolicy(QActionGroup.ExclusionPolicy.ExclusiveOptional)
-        self.act_top = self._toolbar_align(tb, "", tr("valign_top"), self.valign_group, "valign_top", valign="top")
-        self.act_mid = self._toolbar_align(tb, "", tr("valign_middle"), self.valign_group, "valign_middle", valign="middle")
-        self.act_bot = self._toolbar_align(tb, "", tr("valign_bottom"), self.valign_group, "valign_bottom", valign="bottom")
-        tb.addSeparator()
+    def _dropdown(self, tb, tip, fmt_key, default_icon, options) -> QToolButton:
+        """Nút dropdown chọn 1 giá trị định dạng (canh lề / xuống dòng)."""
+        btn = QToolButton()
+        btn.setPopupMode(QToolButton.InstantPopup)
+        btn.setIcon(make_icon(default_icon))
+        btn.setToolTip(tip)
+        btn._fmt_key = fmt_key
+        btn._default_icon = default_icon
+        btn._icon_map = {value: icon for icon, _label, value in options}
+        menu = QMenu(btn)
+        for icon, label, value in options:
+            act = menu.addAction(make_icon(icon), tr(label))
+            act.triggered.connect(
+                lambda _c=False, k=fmt_key, v=value, b=btn, ic=icon: self._apply_dropdown(k, v, b, ic)
+            )
+        btn.setMenu(menu)
+        tb.addWidget(btn)
+        return btn
 
-        self.act_wrap = self._toolbar_toggle(tb, "", tr("wrap"), icon="wrap_text", wrap=True)
+    def _apply_dropdown(self, key, value, btn, icon) -> None:
+        self._apply_format(**{key: value})
+        btn.setIcon(make_icon(icon))
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
         act = QAction(text, self, checkable=True)
@@ -261,6 +319,9 @@ class MainWindow(QMainWindow):
         data_menu.addSeparator()
         self._add_action(data_menu, tr("sort_asc"), lambda: self._sort_current(True))
         self._add_action(data_menu, tr("sort_desc"), lambda: self._sort_current(False))
+        data_menu.addSeparator()
+        self._add_action(data_menu, tr("filter_menu"), self.show_filter)
+        self._add_action(data_menu, tr("clear_filters"), self.clear_filters)
 
         # --- Xem (Freeze) ---
         view_menu = menubar.addMenu(tr("menu_view"))
@@ -345,14 +406,12 @@ class MainWindow(QMainWindow):
         # Tooltip trên toolbar.
         self.font_combo.setToolTip(tr("tooltip_font"))
         self.size_combo.setToolTip(tr("tooltip_size"))
-        for act, key in (
-            (self.act_bold, "bold"), (self.act_italic, "italic"),
-            (self.act_left, "align_left"), (self.act_center, "align_center"),
-            (self.act_right, "align_right"), (self.act_top, "valign_top"),
-            (self.act_mid, "valign_middle"), (self.act_bot, "valign_bottom"),
-            (self.act_wrap, "wrap"),
-        ):
-            act.setToolTip(tr(key))
+        self.act_bold.setToolTip(tr("bold"))
+        self.act_italic.setToolTip(tr("italic"))
+        self.halign_btn.setToolTip(tr("halign_tip"))
+        self.valign_btn.setToolTip(tr("valign_tip"))
+        self.wrap_btn.setToolTip(tr("wrap_tip"))
+        self.act_filter.setToolTip(tr("filter_tip"))
         # Hộp thoại sẽ dựng lại theo ngôn ngữ mới ở lần mở kế tiếp.
         for attr in ("_replace_dialog", "_find_dialog"):
             dlg = getattr(self, attr)
@@ -401,17 +460,15 @@ class MainWindow(QMainWindow):
             self.size_combo.setCurrentText(str(fmt.get("size") or 10))
             self.act_bold.setChecked(bool(fmt.get("bold")))
             self.act_italic.setChecked(bool(fmt.get("italic")))
-            self.act_wrap.setChecked(bool(fmt.get("wrap")))
-            h = fmt.get("halign")
-            self.act_left.setChecked(h == "left")
-            self.act_center.setChecked(h == "center")
-            self.act_right.setChecked(h == "right")
-            v = fmt.get("valign")
-            self.act_top.setChecked(v == "top")
-            self.act_mid.setChecked(v == "middle")
-            self.act_bot.setChecked(v == "bottom")
+            self._sync_btn(self.halign_btn, fmt.get("halign"))
+            self._sync_btn(self.valign_btn, fmt.get("valign"))
+            self._sync_btn(self.wrap_btn, fmt.get("wrap") or "overflow")
         finally:
             self._updating_toolbar = False
+
+    def _sync_btn(self, btn, value) -> None:
+        icon = btn._icon_map.get(value, btn._default_icon)
+        btn.setIcon(make_icon(icon))
 
     def _commit_formula_bar(self) -> None:
         index = self.view.currentIndex()
@@ -429,15 +486,38 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, tr("open_title"), "", tr("file_filter"))
         if not path:
             return
-        try:
-            rows = io_utils.load_file(path)
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("open_error"), str(exc))
-            return
-        self.model.replace_all(rows)
-        self.current_path = Path(path)
-        self._update_title()
-        self.statusBar().showMessage(tr("opened", path=path), 5000)
+
+        dlg = QProgressDialog(tr("opening_file"), tr("cancel"), 0, 0, self)
+        dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumDuration(400)  # chỉ hiện nếu quá 400ms
+
+        worker = _IoWorker(lambda: io_utils.load_file(path), self)
+        cancelled = [False]
+
+        def on_cancel():
+            cancelled[0] = True
+
+        def on_done(rows):
+            dlg.reset()
+            worker.wait()
+            if cancelled[0]:
+                return
+            self.model.replace_all(rows)
+            self.current_path = Path(path)
+            self._update_title()
+            self.statusBar().showMessage(tr("opened", path=path), 5000)
+
+        def on_error(msg):
+            dlg.reset()
+            worker.wait()
+            if not cancelled[0]:
+                QMessageBox.critical(self, tr("open_error"), msg)
+
+        dlg.canceled.connect(on_cancel)
+        worker.finished.connect(on_done)
+        worker.failed.connect(on_error)
+        worker.start()
+        dlg.exec()
 
     def save_file(self) -> None:
         if self.current_path is None:
@@ -454,14 +534,39 @@ class MainWindow(QMainWindow):
         self._save_to(Path(path))
 
     def _save_to(self, path: Path) -> None:
-        try:
-            io_utils.save_file(path, self.model.raw_grid())
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("save_error"), str(exc))
-            return
-        self.current_path = path
-        self._update_title()
-        self.statusBar().showMessage(tr("saved", path=str(path)), 5000)
+        # Snapshot grid trên main thread trước — worker thread chỉ ghi file.
+        rows = self.model.raw_grid()
+
+        dlg = QProgressDialog(tr("saving_file"), tr("cancel"), 0, 0, self)
+        dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumDuration(400)
+
+        worker = _IoWorker(lambda: io_utils.save_file(path, rows), self)
+        cancelled = [False]
+
+        def on_cancel():
+            cancelled[0] = True
+
+        def on_done(_):
+            dlg.reset()
+            worker.wait()
+            if cancelled[0]:
+                return
+            self.current_path = path
+            self._update_title()
+            self.statusBar().showMessage(tr("saved", path=str(path)), 5000)
+
+        def on_error(msg):
+            dlg.reset()
+            worker.wait()
+            if not cancelled[0]:
+                QMessageBox.critical(self, tr("save_error"), msg)
+
+        dlg.canceled.connect(on_cancel)
+        worker.finished.connect(on_done)
+        worker.failed.connect(on_error)
+        worker.start()
+        dlg.exec()
 
     # ------------------------------------------------------------ cấu trúc
     def insert_row_above(self) -> None:
@@ -720,6 +825,141 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("not_found"), 3000)
         return False
 
+    # ------------------------------------------------------------ bộ lọc
+    def toggle_filter(self, on: bool) -> None:
+        """Bật/tắt chế độ lọc: hiện/ẩn icon phễu trên header."""
+        self.view.horizontalHeader().set_filter_enabled(on)
+        if not on:
+            self._filters.clear()
+            self._unhide_all()
+            self.view.horizontalHeader().refresh(set())
+
+    def show_filter(self) -> None:
+        """Menu Dữ liệu → Lọc: bật chế độ lọc rồi mở popup cho cột hiện tại."""
+        if not self.act_filter.isChecked():
+            self.act_filter.setChecked(True)  # kích hoạt toggle
+        col = self.view.currentIndex().column()
+        if col >= 0:
+            self._open_filter_dialog(col)
+
+    def _open_filter_dialog(self, col: int) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("filter_title", col=formula.col_index_to_letters(col)))
+        layout = QVBoxLayout(dlg)
+
+        # Sắp xếp.
+        sort_row = QHBoxLayout()
+        b_az = QPushButton(tr("sort_az"))
+        b_za = QPushButton(tr("sort_za"))
+        sort_row.addWidget(b_az)
+        sort_row.addWidget(b_za)
+        layout.addLayout(sort_row)
+        b_az.clicked.connect(lambda: (self.model.sort_rows(col, True), self._apply_filters(), dlg.accept()))
+        b_za.clicked.connect(lambda: (self.model.sort_rows(col, False), self._apply_filters(), dlg.accept()))
+
+        # Ô tìm trong danh sách.
+        search = QLineEdit()
+        search.setPlaceholderText(tr("search_ph"))
+        layout.addWidget(search)
+
+        # Danh sách giá trị duy nhất (có tick).
+        listw = QListWidget()
+        layout.addWidget(listw)
+        allowed = self._filters.get(col)
+        values = self._distinct_values(col)
+        for disp, raw in values:
+            item = QListWidgetItem(disp if raw != "" else tr("blanks"))
+            item.setData(Qt.UserRole, raw)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            checked = (allowed is None) or (raw in allowed)
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            listw.addItem(item)
+
+        def do_search(text):
+            t = text.lower()
+            for i in range(listw.count()):
+                it = listw.item(i)
+                it.setHidden(t not in it.text().lower())
+
+        search.textChanged.connect(do_search)
+
+        # Chọn tất cả / Bỏ chọn.
+        sel_row = QHBoxLayout()
+        b_all = QPushButton(tr("select_all"))
+        b_clear = QPushButton(tr("clear_sel"))
+        sel_row.addWidget(b_all)
+        sel_row.addWidget(b_clear)
+        layout.addLayout(sel_row)
+
+        def set_all(state):
+            for i in range(listw.count()):
+                if not listw.item(i).isHidden():
+                    listw.item(i).setCheckState(state)
+
+        b_all.clicked.connect(lambda: set_all(Qt.Checked))
+        b_clear.clicked.connect(lambda: set_all(Qt.Unchecked))
+
+        # OK / Hủy.
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        b_cancel = QPushButton(tr("cancel"))
+        b_ok = QPushButton(tr("ok"))
+        b_ok.setDefault(True)
+        btn_row.addWidget(b_cancel)
+        btn_row.addWidget(b_ok)
+        layout.addLayout(btn_row)
+        b_cancel.clicked.connect(dlg.reject)
+
+        def apply_ok():
+            total = listw.count()
+            chosen = set()
+            for i in range(total):
+                it = listw.item(i)
+                if it.checkState() == Qt.Checked:
+                    chosen.add(it.data(Qt.UserRole))
+            if len(chosen) == total:
+                self._filters.pop(col, None)  # chọn hết = không lọc
+            else:
+                self._filters[col] = chosen
+            self._apply_filters()
+            dlg.accept()
+
+        b_ok.clicked.connect(apply_ok)
+        dlg.resize(320, 460)
+        dlg.exec()
+
+    def _distinct_values(self, col: int) -> list[tuple[str, str]]:
+        """Danh sách (hiển_thị, thô) giá trị duy nhất của một cột, đã sắp xếp."""
+        seen = {}
+        for r in range(self.model.rowCount()):
+            disp = str(self.model.data(self.model.index(r, col), Qt.DisplayRole) or "")
+            seen.setdefault(disp, disp)
+        # rỗng đứng đầu, còn lại sắp xếp tự nhiên.
+        keys = sorted(seen, key=lambda s: (s != "", _natural_key(s)))
+        return [(k, k) for k in keys]
+
+    def _apply_filters(self) -> None:
+        """Ẩn các dòng không khớp mọi bộ lọc đang bật."""
+        for r in range(self.model.rowCount()):
+            visible = all(
+                str(self.model.data(self.model.index(r, col), Qt.DisplayRole) or "") in allowed
+                for col, allowed in self._filters.items()
+            )
+            self.view.setRowHidden(r, not visible)
+        self.view.horizontalHeader().refresh(set(self._filters.keys()))
+        self.view.viewport().update()
+
+    def _unhide_all(self) -> None:
+        for r in range(self.model.rowCount()):
+            self.view.setRowHidden(r, False)
+        self.view.viewport().update()
+
+    def clear_filters(self) -> None:
+        """Xóa tiêu chí lọc, hiện lại mọi dòng (giữ chế độ lọc đang bật)."""
+        self._filters.clear()
+        self._unhide_all()
+        self.view.horizontalHeader().refresh(set())
+
     # ------------------------------------------------------------ sắp xếp
     def _sort_by_header(self, col: int) -> None:
         self._sort_column(col, ascending=True)
@@ -731,6 +971,8 @@ class MainWindow(QMainWindow):
 
     def _sort_column(self, col: int, ascending: bool) -> None:
         self.model.sort_rows(col, ascending)
+        if self._filters:
+            self._apply_filters()
         direction = tr("dir_asc") if ascending else tr("dir_desc")
         self.statusBar().showMessage(
             tr("sorted_msg", col=formula.col_index_to_letters(col), dir=direction), 4000
