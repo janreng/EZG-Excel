@@ -18,7 +18,7 @@ DisableProgramGroupPage=yes
 ; {autopf} becomes Program Files for an all-users install.
 PrivilegesRequired=lowest
 OutputDir=installer
-OutputBaseFilename=EZG-Excel-Setup-{#MyAppVersion}
+OutputBaseFilename=Ezcel-Setup-{#MyAppVersion}
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
