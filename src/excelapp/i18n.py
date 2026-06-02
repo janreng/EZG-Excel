@@ -174,6 +174,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "numfmt_date": {"vi": "Ngày (dd/mm/yyyy)", "en": "Date (dd/mm/yyyy)"},
     "numfmt_time": {"vi": "Giờ (hh:mm:ss)", "en": "Time (hh:mm:ss)"},
     "numfmt_scientific": {"vi": "Khoa học", "en": "Scientific"},
+    # --- gộp ô ---
+    "merge_tip": {"vi": "Gộp / bỏ gộp ô", "en": "Merge / unmerge cells"},
     "wrap_overflow": {"vi": "Tràn", "en": "Overflow"},
     "wrap_wrap": {"vi": "Xuống dòng", "en": "Wrap"},
     "wrap_clip": {"vi": "Cắt", "en": "Clip"},

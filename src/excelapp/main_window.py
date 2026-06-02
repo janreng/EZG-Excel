@@ -283,6 +283,8 @@ class MainWindow(QMainWindow):
         # ---- Bảng lưới ----
         self.view = SpreadsheetView()
         self.view.setModel(self.model)
+        self.model.mergesChanged.connect(self.view.refresh_spans)
+        self.view.refresh_spans()
         self.view.setSelectionMode(QTableView.ContiguousSelection)
         self.view.horizontalHeader().setSectionsClickable(True)
         self.view.horizontalHeader().sectionDoubleClicked.connect(self._sort_by_header)
@@ -423,6 +425,8 @@ class MainWindow(QMainWindow):
              ("numfmt_time", lambda: self._apply_format(number_format="hh:mm:ss")),
              ("numfmt_scientific", lambda: self._apply_format(number_format="0.00E+00"))],
         )
+        self.btn_merge = self._ribbon_btn(
+            sec_cell, "merge", tr("merge_tip"), self._toggle_merge)
 
         # ---- Section: Căn lề ----
         sec_align = self._ribbon.add_section(tr("sec_alignment"))
@@ -546,6 +550,12 @@ class MainWindow(QMainWindow):
         if box is None:
             return
         self.model.set_border(box, kind)
+
+    def _toggle_merge(self) -> None:
+        box = self._selection_box()
+        if box is None:
+            return
+        self.model.toggle_merge(box)
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
         """Legacy helper — chỉ còn dùng cho menu action."""

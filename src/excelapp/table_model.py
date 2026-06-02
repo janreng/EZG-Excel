@@ -6,7 +6,7 @@ import datetime
 import functools
 import re
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 
 from . import formula
@@ -37,9 +37,12 @@ _VALIGN = {
 class SpreadsheetModel(QAbstractTableModel):
     """Lưu nội dung thô của ô (chuỗi/công thức) và tính giá trị hiển thị."""
 
+    mergesChanged = Signal()  # phát khi danh sách ô gộp thay đổi (view cập nhật span)
+
     def __init__(self, rows: list[list[str]] | None = None, parent=None):
         super().__init__(parent)
         self._data: list[list[str]] = rows or [[""] * 26 for _ in range(50)]
+        self._merges: list[tuple[int, int, int, int]] = []  # vùng ô gộp
         self._eval_cache: dict[tuple[int, int], object] = {}
         self._computing: set[tuple[int, int]] = set()
         self._fmt: dict[tuple[int, int], dict] = {}  # định dạng theo ô
@@ -354,11 +357,13 @@ class SpreadsheetModel(QAbstractTableModel):
         self.beginResetModel()
         self._data = rows if rows else [[""] * 26 for _ in range(50)]
         self._fmt = {}
+        self._merges = []
         self._eval_cache.clear()
         self._undo.clear()
         self._redo.clear()
         self._rebuild_deps()
         self.endResetModel()
+        self.mergesChanged.emit()
 
     def replace_all_with_fmt(self, rows: list[list[str]], fmt: dict) -> None:
         """Như replace_all nhưng kèm định dạng (khi mở file xlsx)."""
@@ -457,6 +462,52 @@ class SpreadsheetModel(QAbstractTableModel):
     def all_formats(self) -> dict:
         return {k: dict(v) for k, v in self._fmt.items()}
 
+    # ------------------------------------------------------------ gộp ô (merge)
+    def merges(self) -> list[tuple[int, int, int, int]]:
+        return list(self._merges)
+
+    def merge_at(self, row: int, col: int):
+        """Trả vùng gộp chứa ô (row,col), hoặc None."""
+        for (t, l, b, r) in self._merges:
+            if t <= row <= b and l <= col <= r:
+                return (t, l, b, r)
+        return None
+
+    def merge_cells(self, box: tuple[int, int, int, int]) -> None:
+        """Gộp vùng thành một ô. Giữ nội dung ô góc trên-trái, xóa phần còn lại."""
+        top, left, bottom, right = box
+        if top == bottom and left == right:
+            return  # một ô thì không cần gộp
+        self._push_undo(self._full_snapshot())
+        # Bỏ các vùng gộp cũ giao với vùng mới.
+        self._merges = [m for m in self._merges if not _boxes_overlap(m, box)]
+        # Xóa nội dung mọi ô trừ ô góc trên-trái.
+        for r in range(top, bottom + 1):
+            for c in range(left, right + 1):
+                if (r, c) != (top, left):
+                    self._data[r][c] = ""
+        self._merges.append((top, left, bottom, right))
+        self._eval_cache.clear()
+        self._rebuild_deps()
+        self.dataChanged.emit(self.index(top, left), self.index(bottom, right), [])
+        self.mergesChanged.emit()
+
+    def unmerge_cells(self, box: tuple[int, int, int, int]) -> None:
+        """Bỏ gộp mọi vùng giao với box."""
+        hit = [m for m in self._merges if _boxes_overlap(m, box)]
+        if not hit:
+            return
+        self._push_undo(self._full_snapshot())
+        self._merges = [m for m in self._merges if m not in hit]
+        self.mergesChanged.emit()
+
+    def toggle_merge(self, box: tuple[int, int, int, int]) -> None:
+        """Nếu vùng đã có ô gộp thì bỏ gộp, ngược lại thì gộp."""
+        if any(_boxes_overlap(m, box) for m in self._merges):
+            self.unmerge_cells(box)
+        else:
+            self.merge_cells(box)
+
     # ------------------------------------------------------------ undo / redo
     #
     # Stack entries (tagged tuples):
@@ -465,7 +516,8 @@ class SpreadsheetModel(QAbstractTableModel):
     #   ("fmt",    {(r,c): (old_fmt, new_fmt)}) — thay đổi định dạng
 
     def _full_snapshot(self) -> tuple:
-        return ("snapshot", [list(r) for r in self._data], {k: dict(v) for k, v in self._fmt.items()})
+        return ("snapshot", [list(r) for r in self._data],
+                {k: dict(v) for k, v in self._fmt.items()}, list(self._merges))
 
     def _push_undo(self, entry: tuple) -> None:
         self._undo.append(entry)
@@ -503,13 +555,15 @@ class SpreadsheetModel(QAbstractTableModel):
     def _apply_entry(self, entry: tuple, direction: str) -> None:
         kind = entry[0]
         if kind == "snapshot":
-            _, data, fmt = entry
+            _, data, fmt, merges = entry
             self.beginResetModel()
             self._data = data
             self._fmt = fmt
+            self._merges = list(merges)
             self._eval_cache.clear()
             self._rebuild_deps()
             self.endResetModel()
+            self.mergesChanged.emit()
         elif kind == "cells":
             _, changes = entry
             # direction="undo" -> restore old; direction="redo" -> restore new
@@ -765,6 +819,13 @@ _DATE_CODES = {
     "hh:mm:ss": "%H:%M:%S",
     "hh:mm": "%H:%M",
 }
+def _boxes_overlap(a: tuple, b: tuple) -> bool:
+    """Hai vùng (top,left,bottom,right) có giao nhau không."""
+    at, al, ab, ar = a
+    bt, bl, bb, br = b
+    return not (ab < bt or bb < at or ar < bl or br < al)
+
+
 _EXCEL_EPOCH = datetime.datetime(1899, 12, 30)
 # Phần số trong mã định dạng (vd '#,##0.00') để tách prefix/suffix (tiền tệ...).
 _NUM_PAT = re.compile(r"[#0][#0,]*(\.[0#]+)?")

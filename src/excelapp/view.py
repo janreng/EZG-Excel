@@ -222,6 +222,15 @@ class SpreadsheetView(QTableView):
         if self._corner_btn is not None:
             self._corner_btn.installEventFilter(self)
 
+    def refresh_spans(self) -> None:
+        """Áp lại span cho các ô gộp theo model.merges()."""
+        self.clearSpans()
+        model = self.model()
+        if model is None or not hasattr(model, "merges"):
+            return
+        for (t, l, b, r) in model.merges():
+            self.setSpan(t, l, b - t + 1, r - l + 1)
+
     # ------------------------------------------------------------ vùng chọn
     def _selection_box(self) -> tuple[int, int, int, int] | None:
         indexes = self.selectionModel().selectedIndexes()
