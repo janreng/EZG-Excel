@@ -36,6 +36,12 @@ class SpreadsheetModel(QAbstractTableModel):
         self._fmt: dict[tuple[int, int], dict] = {}  # định dạng theo ô
         # Cache QFont theo nội dung định dạng (nhiều ô cùng style dùng chung).
         self._font_cache: dict[tuple, QFont | None] = {}
+        # Dependency maps cho selective recalc.
+        # _deps[A] = tập ô mà công thức tại A tham chiếu tới.
+        # _dependents[B] = tập ô có công thức tham chiếu tới B.
+        self._deps: dict[tuple[int, int], set] = {}
+        self._dependents: dict[tuple[int, int], set] = {}
+        self._rebuild_deps()
         self._undo: list[tuple] = []
         self._redo: list[tuple] = []
         self._undo_limit = 100
@@ -136,20 +142,82 @@ class SpreadsheetModel(QAbstractTableModel):
         if role != Qt.EditRole or not index.isValid():
             return False
         new = "" if value is None else str(value)
-        if self._data[index.row()][index.column()] == new:
+        row, col = index.row(), index.column()
+        if self._data[row][col] == new:
             return True
         self._push_undo()
-        self._data[index.row()][index.column()] = new
-        self._recalculate()
+        self._data[row][col] = new
+        self._update_deps(row, col)           # cập nhật dep map cho ô này
+        self._recalculate((row, col))         # selective: chỉ dirty ô bị ảnh hưởng
         return True
 
-    def _recalculate(self) -> None:
-        """Xóa cache và báo toàn bộ lưới vẽ lại (công thức có thể phụ thuộc nhau)."""
-        self._eval_cache.clear()
-        if self.rowCount() and self.columnCount():
-            top_left = self.index(0, 0)
-            bottom_right = self.index(self.rowCount() - 1, self.columnCount() - 1)
-            self.dataChanged.emit(top_left, bottom_right, [Qt.DisplayRole])
+    # ------------------------------------------------------------ dependency graph
+
+    def _rebuild_deps(self) -> None:
+        """Xây lại toàn bộ dependency map từ dữ liệu thô hiện tại."""
+        self._deps.clear()
+        self._dependents.clear()
+        for r, row in enumerate(self._data):
+            for c, raw in enumerate(row):
+                if formula.is_formula(raw):
+                    refs = formula.extract_refs(raw)
+                    if refs:
+                        self._deps[(r, c)] = refs
+                        for dep in refs:
+                            self._dependents.setdefault(dep, set()).add((r, c))
+
+    def _update_deps(self, row: int, col: int) -> None:
+        """Cập nhật dependency map cho một ô sau khi nội dung thay đổi."""
+        key = (row, col)
+        for dep in self._deps.pop(key, ()):
+            s = self._dependents.get(dep)
+            if s is not None:
+                s.discard(key)
+                if not s:
+                    del self._dependents[dep]
+        raw = self._data[row][col]
+        if formula.is_formula(raw):
+            refs = formula.extract_refs(raw)
+            if refs:
+                self._deps[key] = refs
+                for dep in refs:
+                    self._dependents.setdefault(dep, set()).add(key)
+
+    def _recalculate(self, changed: tuple[int, int] | None = None) -> None:
+        """Xóa cache công thức bị ảnh hưởng và yêu cầu Qt vẽ lại.
+
+        Nếu ``changed`` là None (thao tác bulk / cấu trúc), xóa toàn bộ cache và
+        vẽ lại toàn bộ lưới.  Nếu cho biết ô cụ thể, BFS theo _dependents để chỉ
+        xóa cache các ô bị ảnh hưởng và emit vùng bounding-box của chúng.
+        """
+        if changed is None:
+            self._eval_cache.clear()
+            if self.rowCount() and self.columnCount():
+                tl = self.index(0, 0)
+                br = self.index(self.rowCount() - 1, self.columnCount() - 1)
+                self.dataChanged.emit(tl, br, [Qt.DisplayRole])
+            return
+
+        # Selective invalidation: BFS từ ô vừa đổi qua đồ thị phụ thuộc ngược.
+        dirty: set[tuple[int, int]] = set()
+        queue = [changed]
+        while queue:
+            cell = queue.pop()
+            if cell in dirty:
+                continue
+            dirty.add(cell)
+            for dep in self._dependents.get(cell, ()):
+                if dep not in dirty:
+                    queue.append(dep)
+
+        for cell in dirty:
+            self._eval_cache.pop(cell, None)
+
+        rows_ = [r for r, _ in dirty]
+        cols_ = [c for _, c in dirty]
+        tl = self.index(min(rows_), min(cols_))
+        br = self.index(max(rows_), max(cols_))
+        self.dataChanged.emit(tl, br, [Qt.DisplayRole])
 
     def flags(self, index: QModelIndex):
         if not index.isValid():
@@ -173,6 +241,7 @@ class SpreadsheetModel(QAbstractTableModel):
             self._data.insert(row, [""] * width)
         self._shift_fmt(lambda r, c: (r + count, c) if r >= row else (r, c))
         self.endInsertRows()
+        self._rebuild_deps()
         self._recalculate()
         return True
 
@@ -186,6 +255,7 @@ class SpreadsheetModel(QAbstractTableModel):
             lambda r, c: None if row <= r < row + count else (r - count if r >= row else r, c)
         )
         self.endRemoveRows()
+        self._rebuild_deps()
         self._recalculate()
         return True
 
@@ -197,6 +267,7 @@ class SpreadsheetModel(QAbstractTableModel):
                 r.insert(col, "")
         self._shift_fmt(lambda r, c: (r, c + count) if c >= col else (r, c))
         self.endInsertColumns()
+        self._rebuild_deps()
         self._recalculate()
         return True
 
@@ -211,6 +282,7 @@ class SpreadsheetModel(QAbstractTableModel):
             lambda r, c: None if col <= c < col + count else (r, c - count if c >= col else c)
         )
         self.endRemoveColumns()
+        self._rebuild_deps()
         self._recalculate()
         return True
 
@@ -226,12 +298,8 @@ class SpreadsheetModel(QAbstractTableModel):
         for i, row in enumerate(self._data):
             self._data[i] = [row[j] for j in order]
         self._fmt = {(r, inv[c]): v for (r, c), v in self._fmt.items()}
-        self._eval_cache.clear()
-        # Emit toàn lưới: công thức ở cột bất kỳ có thể tham chiếu cột vừa di
-        # chuyển nên giá trị có thể đổi ngoài phạm vi src..dst.
-        self.dataChanged.emit(
-            self.index(0, 0), self.index(self.rowCount() - 1, n - 1), []
-        )
+        self._rebuild_deps()
+        self._recalculate()
 
     def move_row(self, src: int, dst: int) -> None:
         """Di chuyển dòng từ vị trí ``src`` tới ``dst`` (kéo header)."""
@@ -244,12 +312,8 @@ class SpreadsheetModel(QAbstractTableModel):
         inv = {old: new for new, old in enumerate(order)}
         self._data = [self._data[j] for j in order]
         self._fmt = {(inv[r], c): v for (r, c), v in self._fmt.items()}
-        self._eval_cache.clear()
-        # Emit toàn lưới: công thức ở dòng bất kỳ có thể tham chiếu dòng vừa di
-        # chuyển nên giá trị có thể đổi ngoài phạm vi src..dst.
-        self.dataChanged.emit(
-            self.index(0, 0), self.index(n - 1, self.columnCount() - 1), []
-        )
+        self._rebuild_deps()
+        self._recalculate()
 
     def _shift_fmt(self, mapper) -> None:
         """Dời khóa định dạng theo phép biến đổi (r,c)->(r,c) hoặc None để bỏ."""
@@ -269,6 +333,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._eval_cache.clear()
         self._undo.clear()
         self._redo.clear()
+        self._rebuild_deps()
         self.endResetModel()
 
     def replace_all_with_fmt(self, rows: list[list[str]], fmt: dict) -> None:
@@ -349,6 +414,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._data = data
         self._fmt = fmt
         self._eval_cache.clear()
+        self._rebuild_deps()
         self.endResetModel()
 
     # ------------------------------------------------------------ copy / paste / xóa
@@ -374,6 +440,7 @@ class SpreadsheetModel(QAbstractTableModel):
         for r in range(top, bottom + 1):
             for c in range(left, right + 1):
                 self._data[r][c] = ""
+        self._rebuild_deps()
         self._recalculate()
 
     def paste_block(
@@ -402,10 +469,12 @@ class SpreadsheetModel(QAbstractTableModel):
                         val, top - src_anchor[0], left - src_anchor[1]
                     )
                 self._data[top + i][left + j] = val
-        self._eval_cache.clear()
+        self._rebuild_deps()
         if grew:
+            self._eval_cache.clear()
             self.endResetModel()
         else:
+            self._eval_cache.clear()
             self.dataChanged.emit(
                 self.index(top, left),
                 self.index(top + rows - 1, left + cols - 1),
@@ -436,6 +505,7 @@ class SpreadsheetModel(QAbstractTableModel):
                     self._data[r][c] = new
                     count += 1
         if count:
+            self._rebuild_deps()
             self._recalculate()
         else:
             self._undo.pop()  # không đổi gì -> bỏ snapshot vừa lưu
@@ -467,6 +537,7 @@ class SpreadsheetModel(QAbstractTableModel):
                         continue
                     self._data[r][c] = self._fill_value(source, c - sl, axis="col")
 
+        self._rebuild_deps()
         self._eval_cache.clear()
         self.dataChanged.emit(
             self.index(dt, dl), self.index(db, dr), [Qt.DisplayRole, Qt.EditRole]
@@ -516,6 +587,7 @@ class SpreadsheetModel(QAbstractTableModel):
 
         order = sorted(range(len(self._data)), key=key, reverse=not ascending)
         self._data = [self._data[i] for i in order]
+        self._rebuild_deps()
         self._eval_cache.clear()
         self.layoutChanged.emit()
 

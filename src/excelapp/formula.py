@@ -480,6 +480,51 @@ def offset_formula(formula_text: str, drow: int, dcol: int) -> str:
     return "=" + "".join(parts)
 
 
+def extract_refs(formula_str: str) -> set[tuple[int, int]]:
+    """Quét token của công thức, trả về tập (row, col) được tham chiếu.
+
+    Không parse đầy đủ — chỉ tìm mẫu CELL và CELL:CELL trong danh sách token.
+    Công thức không hợp lệ trả về set rỗng (không raise).
+    """
+    body = formula_str[1:] if formula_str.startswith("=") else formula_str
+    try:
+        tokens = _tokenize(body)
+    except FormulaError:
+        return set()
+    refs: set[tuple[int, int]] = set()
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.kind == "CELL":
+            # Kiểm tra mẫu range: CELL ':' CELL
+            if (
+                i + 2 < len(tokens)
+                and tokens[i + 1].kind == "OP"
+                and tokens[i + 1].value == ":"
+                and tokens[i + 2].kind == "CELL"
+            ):
+                try:
+                    r1, c1 = parse_cell_ref(tok.value)
+                    r2, c2 = parse_cell_ref(tokens[i + 2].value)
+                    r1, r2 = sorted((r1, r2))
+                    c1, c2 = sorted((c1, c2))
+                    for r in range(r1, r2 + 1):
+                        for c in range(c1, c2 + 1):
+                            refs.add((r, c))
+                except FormulaError:
+                    pass
+                i += 3
+            else:
+                try:
+                    refs.add(parse_cell_ref(tok.value))
+                except FormulaError:
+                    pass
+                i += 1
+        else:
+            i += 1
+    return refs
+
+
 def evaluate(formula: str, resolver: Callable[[int, int], object]):
     """Tính một công thức (đã có dấu '=') và trả về số hoặc chuỗi."""
     body = formula[1:] if formula.startswith("=") else formula
