@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFontComboBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QKeySequenceEdit,
@@ -28,6 +29,8 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
+    QTabBar,
     QTableView,
     QToolBar,
     QToolButton,
@@ -66,6 +69,79 @@ class _IoWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class _RibbonSection(QWidget):
+    """Một section trong ribbon: hàng nút phía trên + label phía dưới."""
+
+    def __init__(self, label: str, parent=None):
+        super().__init__(parent)
+        vlay = QVBoxLayout(self)
+        vlay.setContentsMargins(4, 2, 4, 0)
+        vlay.setSpacing(0)
+
+        self._btn_area = QWidget()
+        self._btn_area.setStyleSheet("QWidget { background: transparent; }")
+        self._btn_layout = QHBoxLayout(self._btn_area)
+        self._btn_layout.setContentsMargins(0, 0, 0, 0)
+        self._btn_layout.setSpacing(2)
+        self._btn_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self._label_w = QLabel(label)
+        self._label_w.setAlignment(Qt.AlignCenter)
+        self._label_w.setStyleSheet(
+            "QLabel { font-size: 10px; color: #6d6d6d; padding: 1px 0; background: transparent; }"
+        )
+
+        vlay.addWidget(self._btn_area, 1)
+        vlay.addWidget(self._label_w)
+
+    def add_widget(self, w: QWidget) -> None:
+        self._btn_layout.addWidget(w)
+
+    def add_stretch(self) -> None:
+        self._btn_layout.addStretch()
+
+
+class _RibbonBar(QWidget):
+    """Ribbon chứa các section, có separator dọc giữa các section."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(68)
+        self.setStyleSheet(
+            "_RibbonBar { background: #F3F3F3; border-bottom: 1px solid #D0D0D0; }"
+            "QToolButton { border: none; border-radius: 3px; padding: 4px 6px;"
+            "  min-width: 26px; min-height: 26px; font-size: 13px; color: #3c3c3c; }"
+            "QToolButton:hover   { background: #E5E5E5; }"
+            "QToolButton:pressed { background: #CCCCCC; }"
+            "QToolButton:checked { background: #D9EAD3; color: #217346; }"
+            "QComboBox  { border: 1px solid #D0D0D0; background: white;"
+            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; }"
+            "QComboBox:hover { border-color: #217346; }"
+            "QFontComboBox { border: 1px solid #D0D0D0; background: white;"
+            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; }"
+            "QFontComboBox:hover { border-color: #217346; }"
+        )
+        self._hlay = QHBoxLayout(self)
+        self._hlay.setContentsMargins(6, 0, 6, 0)
+        self._hlay.setSpacing(0)
+        self._sections: list[_RibbonSection] = []
+
+    def add_section(self, label: str) -> "_RibbonSection":
+        if self._sections:
+            sep = QFrame(self)
+            sep.setFrameShape(QFrame.VLine)
+            sep.setFixedWidth(1)
+            sep.setStyleSheet("QFrame { background: #D0D0D0; margin: 6px 4px; }")
+            self._hlay.addWidget(sep)
+        sec = _RibbonSection(label, self)
+        self._hlay.addWidget(sec)
+        self._sections.append(sec)
+        return sec
+
+    def add_stretch(self) -> None:
+        self._hlay.addStretch()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -89,54 +165,121 @@ class MainWindow(QMainWindow):
         self.resize(1000, 650)
 
     def _style_chrome(self) -> None:
-        """Giao diện menu/toolbar thoáng, dễ nhìn (kiểu Google Sheets)."""
+        """Giao diện menu/toolbar kiểu Microsoft Excel."""
         self.menuBar().setStyleSheet(
             """
-            QMenuBar { background: #ffffff; border-bottom: 1px solid #e8eaed;
-                       padding: 3px 6px; font-size: 13px; }
-            QMenuBar::item { padding: 6px 12px; margin: 0 1px; background: transparent;
-                             border-radius: 4px; color: #3c4043; }
-            QMenuBar::item:selected { background: #f1f3f4; }
-            QMenuBar::item:pressed { background: #e8f0fe; color: #1a73e8; }
-            QMenu { background: #ffffff; border: 1px solid #dadce0; padding: 4px; }
-            QMenu::item { padding: 6px 28px 6px 16px; border-radius: 4px; }
-            QMenu::item:selected { background: #e8f0fe; color: #1a73e8; }
-            QMenu::separator { height: 1px; background: #e8eaed; margin: 4px 8px; }
+            QMenuBar { background: #217346; border-bottom: none;
+                       padding: 2px 6px; font-size: 13px; color: #ffffff; }
+            QMenuBar::item { padding: 5px 10px; margin: 0 1px; background: transparent;
+                             border-radius: 3px; color: #ffffff; }
+            QMenuBar::item:selected { background: #185c37; }
+            QMenuBar::item:pressed  { background: #145228; }
+            QMenu { background: #ffffff; border: 1px solid #C0C0C0; padding: 4px; }
+            QMenu::item { padding: 6px 28px 6px 16px; border-radius: 2px; color: #1c1c1c; }
+            QMenu::item:selected { background: #EBF3E8; color: #217346; }
+            QMenu::separator { height: 1px; background: #D0D0D0; margin: 4px 8px; }
             """
         )
-        self._toolbar.setStyleSheet(
-            """
-            QToolBar { background: #ffffff; border-bottom: 1px solid #e8eaed;
-                       spacing: 2px; padding: 3px; }
-            QToolButton { border: none; border-radius: 4px; padding: 4px 7px;
-                          font-size: 14px; color: #3c4043; }
-            QToolButton:hover { background: #f1f3f4; }
-            QToolButton:checked { background: #e8f0fe; color: #1a73e8; }
-            QToolBar::separator { background: #e8eaed; width: 1px; margin: 4px 4px; }
-            """
-        )
+        # Ribbon đã có stylesheet riêng trong _RibbonBar — toolbar holder chỉ cần trong suốt
+        if hasattr(self, "_toolbar"):
+            self._toolbar.setStyleSheet(
+                "QToolBar { background: #F3F3F3; border: none; padding: 0; margin: 0; }"
+            )
 
     # ------------------------------------------------------------ dựng UI
     def _build_ui(self) -> None:
         central = QWidget()
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Thanh công thức: ô địa chỉ + nội dung ô hiện tại.
-        bar = QHBoxLayout()
-        self.cell_label = QLabel("A1")
-        self.cell_label.setMinimumWidth(60)
-        self.cell_label.setAlignment(Qt.AlignCenter)
+        # ---- Thanh công thức kiểu Excel ----
+        formula_bar = QWidget()
+        formula_bar.setFixedHeight(28)
+        formula_bar.setStyleSheet(
+            "QWidget { background: #ffffff; border-bottom: 1px solid #D0D0D0; }"
+        )
+        fb_layout = QHBoxLayout(formula_bar)
+        fb_layout.setContentsMargins(4, 2, 4, 2)
+        fb_layout.setSpacing(0)
+
+        # Name Box — QLineEdit gõ được để navigate
+        self.name_box = QLineEdit("A1")
+        self.name_box.setObjectName("name_box")
+        self.name_box.setFixedWidth(80)
+        self.name_box.setAlignment(Qt.AlignCenter)
+        self.name_box.setStyleSheet(
+            "QLineEdit#name_box {"
+            "  border: 1px solid #D0D0D0; background: white;"
+            "  padding: 1px 4px; font-size: 12px; border-radius: 0;"
+            "}"
+            "QLineEdit#name_box:focus { border-color: #217346; }"
+        )
+        self.name_box.returnPressed.connect(self._navigate_to_name_box)
+        fb_layout.addWidget(self.name_box)
+
+        # Separator dọc
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet("QFrame { border: none; background: #D0D0D0; max-width: 1px; margin: 4px 6px; }")
+        fb_layout.addWidget(sep)
+
+        # Nút ✕ và ✓ (ẩn mặc định, hiện khi đang sửa)
+        self.btn_cancel_edit = QToolButton()
+        self.btn_cancel_edit.setText("✕")
+        self.btn_cancel_edit.setFixedSize(22, 22)
+        self.btn_cancel_edit.setStyleSheet(
+            "QToolButton { border: none; color: #595959; font-size: 12px; }"
+            "QToolButton:hover { color: #c0392b; }"
+        )
+        self.btn_cancel_edit.setVisible(False)
+        self.btn_cancel_edit.clicked.connect(self._cancel_formula_edit)
+        fb_layout.addWidget(self.btn_cancel_edit)
+
+        self.btn_accept_edit = QToolButton()
+        self.btn_accept_edit.setText("✓")
+        self.btn_accept_edit.setFixedSize(22, 22)
+        self.btn_accept_edit.setStyleSheet(
+            "QToolButton { border: none; color: #595959; font-size: 12px; }"
+            "QToolButton:hover { color: #217346; }"
+        )
+        self.btn_accept_edit.setVisible(False)
+        self.btn_accept_edit.clicked.connect(self._commit_formula_bar)
+        fb_layout.addWidget(self.btn_accept_edit)
+
+        # Nút fx
+        self.btn_fx = QToolButton()
+        self.btn_fx.setText("ƒx")
+        self.btn_fx.setFixedSize(28, 22)
+        self.btn_fx.setStyleSheet(
+            "QToolButton { border: none; color: #217346; font-style: italic;"
+            " font-size: 13px; font-weight: bold; }"
+            "QToolButton:hover { background: #EBF3E8; border-radius: 2px; }"
+        )
+        fb_layout.addWidget(self.btn_fx)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.VLine)
+        sep2.setStyleSheet("QFrame { border: none; background: #D0D0D0; max-width: 1px; margin: 4px 4px; }")
+        fb_layout.addWidget(sep2)
+
+        # Formula input
         self.formula_edit = QLineEdit()
         self.formula_edit.setPlaceholderText(tr("formula_placeholder"))
+        self.formula_edit.setStyleSheet(
+            "QLineEdit { border: none; background: white; padding: 1px 4px; font-size: 12px; }"
+            "QLineEdit:focus { border-bottom: 1px solid #217346; }"
+        )
         self.formula_edit.returnPressed.connect(self._commit_formula_bar)
-        bar.addWidget(self.cell_label)
-        bar.addWidget(QLabel("ƒx"))
-        bar.addWidget(self.formula_edit)
-        layout.addLayout(bar)
+        self.formula_edit.textEdited.connect(self._on_formula_edited)
+        fb_layout.addWidget(self.formula_edit, 1)
 
-        # Bảng lưới.
+        layout.addWidget(formula_bar)
+
+        # Giữ cell_label alias để code cũ không bị vỡ
+        self.cell_label = self.name_box
+
+        # ---- Bảng lưới ----
         self.view = SpreadsheetView()
         self.view.setModel(self.model)
         self.view.setSelectionMode(QTableView.ContiguousSelection)
@@ -145,29 +288,90 @@ class MainWindow(QMainWindow):
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._show_context_menu)
         self.view.selectionModel().currentChanged.connect(self._on_current_changed)
+        self.view.selectionModel().selectionChanged.connect(self._update_stats)
         self.view.horizontalHeader().filterClicked.connect(self._open_filter_dialog)
-        layout.addWidget(self.view)
+        layout.addWidget(self.view, 1)
 
         self.freeze = FreezeManager(self.view)
 
+        # ---- Sheet tab bar kiểu Excel (dưới cùng) ----
+        self.sheet_tabs = QTabBar()
+        self.sheet_tabs.setShape(QTabBar.RoundedSouth)
+        self.sheet_tabs.addTab("Sheet1")
+        self.sheet_tabs.setExpanding(False)
+        self.sheet_tabs.setStyleSheet(
+            "QTabBar { background: #D9D9D9; border-top: 1px solid #C0C0C0; }"
+            "QTabBar::tab {"
+            "  background: #D9D9D9; border: 1px solid #C0C0C0;"
+            "  border-bottom: none; border-top-left-radius: 3px; border-top-right-radius: 3px;"
+            "  padding: 3px 18px; font-size: 12px; color: #595959;"
+            "  margin-right: 2px; }"
+            "QTabBar::tab:selected {"
+            "  background: #ffffff; color: #217346; font-weight: bold;"
+            "  border-bottom: 2px solid #217346; }"
+            "QTabBar::tab:hover:!selected { background: #E5E5E5; }"
+        )
+        layout.addWidget(self.sheet_tabs)
+
         self.setCentralWidget(central)
+
+        # ---- Status bar ----
         self.statusBar().showMessage(tr("ready"))
-        self._version_label = QLabel(f"{APP_NAME} v{__version__}")
+        self._stats_label = QLabel("")
+        self._stats_label.setStyleSheet("QLabel { color: #595959; font-size: 12px; padding: 0 8px; }")
+        self.statusBar().addPermanentWidget(self._stats_label)
+        self._version_label = QLabel(f"  {APP_NAME} v{__version__}  ")
+        self._version_label.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
         self.statusBar().addPermanentWidget(self._version_label)
+        self.statusBar().setStyleSheet(
+            "QStatusBar { background: #F3F3F3; border-top: 1px solid #D0D0D0; font-size: 12px; }"
+        )
 
     def _build_toolbar(self) -> None:
-        tb = QToolBar()
-        tb.setMovable(False)
-        self.addToolBar(tb)
-        self._toolbar = tb
+        # Dùng QToolBar ẩn để giữ shortcut và action tương thích menu
+        hidden_tb = QToolBar()
+        hidden_tb.setVisible(False)
+        self.addToolBar(hidden_tb)
 
+        # Ribbon bar thực sự (widget tự vẽ, không phải QToolBar)
+        self._ribbon = _RibbonBar()
+        # Đặt ribbon vào vị trí toolbar area
+        tb_holder = QToolBar()
+        tb_holder.setMovable(False)
+        tb_holder.setFloatable(False)
+        tb_holder.setContentsMargins(0, 0, 0, 0)
+        w_holder = QWidget()
+        hl = QHBoxLayout(w_holder)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        hl.addWidget(self._ribbon)
+        tb_holder.addWidget(w_holder)
+        tb_holder.setStyleSheet(
+            "QToolBar { background: #F3F3F3; border: none; padding: 0; margin: 0; spacing: 0; }"
+        )
+        self.addToolBar(tb_holder)
+        self._toolbar = tb_holder  # cho _style_chrome
+
+        # ---- Section: Clipboard ----
+        sec_clip = self._ribbon.add_section(tr("sec_clipboard"))
+        btn_paste = self._ribbon_btn(sec_clip, "paste", tr("paste"), self.paste_clipboard)
+        btn_cut   = self._ribbon_btn(sec_clip, "cut",   tr("cut"),   self.cut_selection)
+        btn_copy  = self._ribbon_btn(sec_clip, "copy",  tr("copy"),  self.copy_selection)
+
+        # ---- Section: Hoàn tác ----
+        sec_undo = self._ribbon.add_section(tr("sec_undo"))
+        self._ribbon_btn(sec_undo, "undo", tr("undo"), self.undo)
+        self._ribbon_btn(sec_undo, "redo", tr("redo"), self.redo)
+
+        # ---- Section: Phông chữ ----
+        sec_font = self._ribbon.add_section(tr("sec_font"))
         self.font_combo = QFontComboBox()
-        self.font_combo.setMaximumWidth(180)
+        self.font_combo.setMaximumWidth(160)
         self.font_combo.setToolTip(tr("tooltip_font"))
         self.font_combo.currentFontChanged.connect(
             lambda f: self._apply_format(font=f.family())
         )
-        tb.addWidget(self.font_combo)
+        sec_font.add_widget(self.font_combo)
 
         self.size_combo = QComboBox()
         self.size_combo.setEditable(True)
@@ -175,43 +379,89 @@ class MainWindow(QMainWindow):
             ["8", "9", "10", "11", "12", "14", "16", "18", "20", "24", "28", "36", "48"]
         )
         self.size_combo.setCurrentText("10")
-        self.size_combo.setMaximumWidth(60)
+        self.size_combo.setMaximumWidth(52)
         self.size_combo.setToolTip(tr("tooltip_size"))
         self.size_combo.currentTextChanged.connect(self._on_size_changed)
-        tb.addWidget(self.size_combo)
-        tb.addSeparator()
+        sec_font.add_widget(self.size_combo)
 
-        self.act_bold = self._toolbar_toggle(tb, "B", tr("bold"), bold=True)
-        self.act_italic = self._toolbar_toggle(tb, "I", tr("italic"), italic=True)
-        tb.addSeparator()
+        # B / I / U
+        self.btn_bold   = self._ribbon_toggle(sec_font, "bold",      tr("bold"),      bold=True)
+        self.btn_italic = self._ribbon_toggle(sec_font, "italic",     tr("italic"),    italic=True)
+        self.btn_uline  = self._ribbon_toggle(sec_font, "underline",  tr("underline"), underline=True)
+        # QAction aliases để menu/shortcut vẫn hoạt động
+        self.act_bold   = self.btn_bold.defaultAction()
+        self.act_italic = self.btn_italic.defaultAction()
 
-        # Dropdown canh ngang / canh dọc / xuống dòng (kiểu Google Sheets).
-        self.halign_btn = self._dropdown(
-            tb, tr("halign_tip"), "halign", "align_left",
+        # ---- Section: Căn lề ----
+        sec_align = self._ribbon.add_section(tr("sec_alignment"))
+        self.halign_btn = self._ribbon_dropdown(
+            sec_align, tr("halign_tip"), "halign", "align_left",
             [("align_left", "align_left", "left"),
              ("align_center", "align_center", "center"),
              ("align_right", "align_right", "right")],
         )
-        self.valign_btn = self._dropdown(
-            tb, tr("valign_tip"), "valign", "valign_bottom",
+        self.valign_btn = self._ribbon_dropdown(
+            sec_align, tr("valign_tip"), "valign", "valign_bottom",
             [("valign_top", "valign_top", "top"),
              ("valign_middle", "valign_middle", "middle"),
              ("valign_bottom", "valign_bottom", "bottom")],
         )
-        self.wrap_btn = self._dropdown(
-            tb, tr("wrap_tip"), "wrap", "wrap_overflow",
+        self.wrap_btn = self._ribbon_dropdown(
+            sec_align, tr("wrap_tip"), "wrap", "wrap_overflow",
             [("wrap_overflow", "wrap_overflow", "overflow"),
              ("wrap_text", "wrap_wrap", "wrap"),
              ("wrap_clip", "wrap_clip", "clip")],
         )
-        tb.addSeparator()
-        self.act_filter = QAction(make_icon("filter"), tr("filter_tip"), self)
-        self.act_filter.setCheckable(True)
-        self.act_filter.toggled.connect(self.toggle_filter)
-        tb.addAction(self.act_filter)
 
-    def _dropdown(self, tb, tip, fmt_key, default_icon, options) -> QToolButton:
-        """Nút dropdown chọn 1 giá trị định dạng (canh lề / xuống dòng)."""
+        # ---- Section: Sắp xếp & Tìm ----
+        sec_edit = self._ribbon.add_section(tr("sec_editing"))
+        self._ribbon_btn(sec_edit, "sort_asc",  tr("sort_asc"),  lambda: self._sort_current(True))
+        self._ribbon_btn(sec_edit, "sort_desc", tr("sort_desc"), lambda: self._sort_current(False))
+
+        # Filter toggle
+        self.btn_filter = QToolButton()
+        self.btn_filter.setIcon(make_icon("filter"))
+        self.btn_filter.setToolTip(tr("filter_tip"))
+        self.btn_filter.setCheckable(True)
+        self.btn_filter.toggled.connect(self.toggle_filter)
+        sec_edit.add_widget(self.btn_filter)
+
+        self._ribbon_btn(sec_edit, "find", tr("find"), self.show_find)
+
+        self._ribbon.add_stretch()
+
+        # act_filter alias cho toggle_filter
+        self.act_filter = QAction(tr("filter_tip"), self, checkable=True)
+        self.act_filter.toggled.connect(lambda v: self.btn_filter.setChecked(v))
+        self.btn_filter.toggled.connect(lambda v: self.act_filter.setChecked(v))
+
+    # ---- Ribbon helpers ----
+
+    def _ribbon_btn(self, section: "_RibbonSection", icon_name: str, tip: str, slot) -> QToolButton:
+        """Nút đơn trong ribbon."""
+        btn = QToolButton()
+        btn.setIcon(make_icon(icon_name))
+        btn.setToolTip(tip)
+        btn.clicked.connect(slot)
+        section.add_widget(btn)
+        return btn
+
+    def _ribbon_toggle(self, section: "_RibbonSection", icon_name: str, tip: str, **attr) -> QToolButton:
+        """Nút toggle (bold/italic/underline) trong ribbon."""
+        btn = QToolButton()
+        btn.setIcon(make_icon(icon_name))
+        btn.setToolTip(tip)
+        btn.setCheckable(True)
+        key = next(iter(attr))
+        act = QAction(tip, self, checkable=True)
+        act.toggled.connect(lambda checked: self._apply_format(**{key: checked}))
+        btn.setDefaultAction(act)
+        section.add_widget(btn)
+        return btn
+
+    def _ribbon_dropdown(self, section: "_RibbonSection", tip: str, fmt_key: str,
+                         default_icon: str, options: list) -> QToolButton:
+        """Nút dropdown định dạng trong ribbon."""
         btn = QToolButton()
         btn.setPopupMode(QToolButton.InstantPopup)
         btn.setIcon(make_icon(default_icon))
@@ -226,7 +476,7 @@ class MainWindow(QMainWindow):
                 lambda _c=False, k=fmt_key, v=value, b=btn, ic=icon: self._apply_dropdown(k, v, b, ic)
             )
         btn.setMenu(menu)
-        tb.addWidget(btn)
+        section.add_widget(btn)
         return btn
 
     def _apply_dropdown(self, key, value, btn, icon) -> None:
@@ -234,13 +484,13 @@ class MainWindow(QMainWindow):
         btn.setIcon(make_icon(icon))
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
+        """Legacy helper — chỉ còn dùng cho menu action."""
         act = QAction(text, self, checkable=True)
         if icon:
             act.setIcon(make_icon(icon))
         act.setToolTip(tip)
         key = next(iter(attr))
         act.toggled.connect(lambda checked: self._apply_format(**{key: checked}))
-        tb.addAction(act)
         return act
 
     def _toolbar_align(self, tb, text, tip, group, icon=None, **attr) -> QAction:
@@ -251,7 +501,6 @@ class MainWindow(QMainWindow):
         key, value = next(iter(attr.items()))
         act.triggered.connect(lambda: self._apply_format(**{key: value}))
         group.addAction(act)
-        tb.addAction(act)
         return act
 
     def _on_size_changed(self, text: str) -> None:
@@ -446,9 +695,78 @@ class MainWindow(QMainWindow):
         if not current.isValid():
             return
         ref = formula.col_index_to_letters(current.column()) + str(current.row() + 1)
-        self.cell_label.setText(ref)
+        self.name_box.setText(ref)
         self.formula_edit.setText(self.model.data(current, Qt.EditRole) or "")
+        self._hide_formula_buttons()
         self._sync_toolbar(current.row(), current.column())
+
+    def _on_formula_edited(self, text: str) -> None:
+        """Khi user bắt đầu gõ vào formula bar, hiện nút ✕ và ✓."""
+        self.btn_cancel_edit.setVisible(True)
+        self.btn_accept_edit.setVisible(True)
+
+    def _hide_formula_buttons(self) -> None:
+        self.btn_cancel_edit.setVisible(False)
+        self.btn_accept_edit.setVisible(False)
+
+    def _cancel_formula_edit(self) -> None:
+        """Hủy sửa — khôi phục nội dung cũ."""
+        cur = self.view.currentIndex()
+        if cur.isValid():
+            self.formula_edit.setText(self.model.data(cur, Qt.EditRole) or "")
+        self._hide_formula_buttons()
+        self.view.setFocus()
+
+    def _navigate_to_name_box(self) -> None:
+        """Name Box: khi Enter, nhảy tới địa chỉ ô được gõ (vd 'B3', 'A1:C5')."""
+        import re as _re
+        text = self.name_box.text().strip().upper()
+        # Thử parse vùng A1:C5
+        range_m = _re.fullmatch(r"([A-Z]+)(\d+):([A-Z]+)(\d+)", text)
+        single_m = _re.fullmatch(r"([A-Z]+)(\d+)", text)
+        if range_m:
+            c1 = formula.col_letters_to_index(range_m.group(1))
+            r1 = int(range_m.group(2)) - 1
+            c2 = formula.col_letters_to_index(range_m.group(3))
+            r2 = int(range_m.group(4)) - 1
+            box = (min(r1,r2), min(c1,c2), max(r1,r2), max(c1,c2))
+            self.view.select_box(box)
+            self.view.scrollTo(self.model.index(box[0], box[1]))
+        elif single_m:
+            col = formula.col_letters_to_index(single_m.group(1))
+            row = int(single_m.group(2)) - 1
+            idx = self.model.index(row, col)
+            if idx.isValid():
+                self.view.setCurrentIndex(idx)
+                self.view.scrollTo(idx)
+        self.view.setFocus()
+
+    # ------------------------------------------------------------ status bar thống kê
+    def _update_stats(self) -> None:
+        """Cập nhật SUM / AVERAGE / COUNT khi selection thay đổi."""
+        box = self._selection_box()
+        if box is None:
+            self._stats_label.setText("")
+            return
+        top, left, bottom, right = box
+        n_cells = (bottom - top + 1) * (right - left + 1)
+        if n_cells <= 1:
+            self._stats_label.setText("")
+            return
+        values = []
+        for r in range(top, bottom + 1):
+            for c in range(left, right + 1):
+                v = self.model._cell_value(r, c)
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    values.append(float(v))
+        if values:
+            s = sum(values)
+            avg = s / len(values)
+            self._stats_label.setText(
+                f"Trung bình: {avg:g}    Số lượng: {len(values)}    Tổng: {s:g}"
+            )
+        else:
+            self._stats_label.setText(f"Số lượng: {n_cells}")
 
     def _sync_toolbar(self, row: int, col: int) -> None:
         """Cập nhật trạng thái toolbar theo định dạng ô hiện tại."""
@@ -474,7 +792,8 @@ class MainWindow(QMainWindow):
         index = self.view.currentIndex()
         if index.isValid():
             self.model.setData(index, self.formula_edit.text(), Qt.EditRole)
-            self.view.setFocus()
+        self._hide_formula_buttons()
+        self.view.setFocus()
 
     # ------------------------------------------------------------ thao tác tệp
     def new_file(self) -> None:

@@ -143,6 +143,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "halign_tip": {"vi": "Canh lề ngang", "en": "Horizontal align"},
     "valign_tip": {"vi": "Canh lề dọc", "en": "Vertical align"},
     "wrap_tip": {"vi": "Xuống dòng / Tràn / Cắt", "en": "Text wrapping"},
+    # --- ribbon section labels ---
+    "sec_clipboard": {"vi": "Bảng tạm", "en": "Clipboard"},
+    "sec_undo":      {"vi": "Hoàn tác",  "en": "Undo"},
+    "sec_font":      {"vi": "Phông chữ", "en": "Font"},
+    "sec_alignment": {"vi": "Căn lề",   "en": "Alignment"},
+    "sec_editing":   {"vi": "Sửa",      "en": "Editing"},
+    # --- new toolbar actions ---
+    "underline": {"vi": "Gạch dưới", "en": "Underline"},
     "wrap_overflow": {"vi": "Tràn", "en": "Overflow"},
     "wrap_wrap": {"vi": "Xuống dòng", "en": "Wrap"},
     "wrap_clip": {"vi": "Cắt", "en": "Clip"},

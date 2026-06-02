@@ -2,20 +2,129 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, QRect, Qt
+from PySide6.QtCore import (
+    QEvent,
+    QItemSelection,
+    QItemSelectionModel,
+    QRect,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QColor, QPainter, QPen, QRegion
 from PySide6.QtWidgets import (
     QAbstractButton,
     QFrame,
+    QHeaderView,
     QStyle,
+    QStyleOptionHeader,
     QStyleOptionViewItem,
     QStyledItemDelegate,
     QTableView,
 )
 
-_BLUE = QColor("#1a73e8")          # màu xanh nhấn (giống Google Sheets)
-_WASH = QColor(26, 115, 232, 38)   # lớp phủ xanh trong suốt (alpha) lên vùng chọn
+from .icons import make_icon
+
+_ICON = 15  # cạnh icon phễu trong header (px)
+
+
+class FilterHeaderView(QHeaderView):
+    """Header cột: khi bật filter sẽ vẽ icon phễu, bấm vào mở popup lọc.
+    Các cột thuộc vùng chọn được tô nền vàng nhạt kiểu Excel."""
+
+    filterClicked = Signal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self.filter_enabled = False
+        self.active: set[int] = set()  # các cột đang có bộ lọc
+        self.selected_cols: set[int] = set()  # cột đang được chọn
+        self._icon = make_icon("filter", "#5f6368", _ICON)
+        self._icon_on = make_icon("filter", "#217346", _ICON)
+        self.setSectionsClickable(True)
+        self.setHighlightSections(False)
+
+    def set_filter_enabled(self, on: bool) -> None:
+        self.filter_enabled = on
+        self.viewport().update()
+
+    def refresh(self, active: set[int]) -> None:
+        self.active = set(active)
+        self.viewport().update()
+
+    def set_selected_cols(self, cols: set[int]) -> None:
+        self.selected_cols = cols
+        self.viewport().update()
+
+    def _icon_left(self, logical: int) -> int:
+        right = self.sectionViewportPosition(logical) + self.sectionSize(logical)
+        return right - _ICON - 4
+
+    def paintSection(self, painter, rect, logical):
+        # Nếu cột đang trong vùng chọn, tô nền vàng nhạt trước khi super paint
+        if logical in self.selected_cols:
+            painter.save()
+            painter.fillRect(rect.adjusted(0, 0, -1, -1), _HDR_SEL_BG)
+            # Vẽ border dưới màu xanh lá Excel thay vì xám
+            painter.setPen(QPen(_BLUE, 2))
+            painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+            painter.restore()
+            # Vẽ text thủ công để giữ màu đậm
+            painter.save()
+            painter.setPen(_HDR_SEL_FG)
+            opt = self.styleOptionForIndex(painter, rect, logical)
+            opt.palette.setColor(opt.palette.ButtonText, _HDR_SEL_FG)
+            painter.restore()
+        super().paintSection(painter, rect, logical)
+        if not self.filter_enabled:
+            return
+        icon = self._icon_on if logical in self.active else self._icon
+        ir = QRect(rect.right() - _ICON - 4, rect.center().y() - _ICON // 2, _ICON, _ICON)
+        icon.paint(painter, ir)
+
+    def styleOptionForIndex(self, painter, rect, logical):
+        from PySide6.QtWidgets import QStyleOptionHeader
+        opt = QStyleOptionHeader()
+        self.initStyleOption(opt)
+        opt.rect = rect
+        opt.section = logical
+        return opt
+
+    def mousePressEvent(self, event):
+        if self.filter_enabled:
+            pos = event.position().toPoint()
+            logical = self.logicalIndexAt(pos)
+            if logical >= 0 and pos.x() >= self._icon_left(logical):
+                self.filterClicked.emit(logical)
+                return  # không sort/di chuyển khi bấm vào phễu
+        super().mousePressEvent(event)
+
+_BLUE   = QColor("#217346")         # Excel green (selection border & handle)
+_WASH   = QColor(33, 115, 70, 25)  # lớp phủ xanh lá nhạt lên vùng chọn
+_HDR_SEL_BG = QColor("#FFFDE7")    # header highlight khi cột/hàng được chọn
+_HDR_SEL_FG = QColor("#000000")
 _HANDLE = 8                        # cạnh vùng bắt núm kéo (px)
+
+
+class RowHeaderView(QHeaderView):
+    """Header hàng: highlight hàng đang được chọn, kiểu Excel."""
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Vertical, parent)
+        self.selected_rows: set[int] = set()
+        self.setHighlightSections(False)
+
+    def set_selected_rows(self, rows: set[int]) -> None:
+        self.selected_rows = rows
+        self.viewport().update()
+
+    def paintSection(self, painter, rect, logical):
+        if logical in self.selected_rows:
+            painter.save()
+            painter.fillRect(rect.adjusted(0, 0, -1, -1), _HDR_SEL_BG)
+            painter.setPen(QPen(_BLUE, 2))
+            painter.drawLine(rect.right(), rect.top(), rect.right(), rect.bottom())
+            painter.restore()
+        super().paintSection(painter, rect, logical)
 
 
 class CellDelegate(QStyledItemDelegate):
@@ -27,10 +136,14 @@ class CellDelegate(QStyledItemDelegate):
 
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
-        # Bật xuống dòng cho ô có bật wrap.
         model = self._view.model()
-        if model is not None and model.cell_wrap(index.row(), index.column()):
+        if model is None:
+            return
+        mode = model.wrap_mode(index.row(), index.column())
+        if mode == "wrap":
             option.features |= QStyleOptionViewItem.WrapText
+        elif mode == "clip":
+            option.textElideMode = Qt.ElideNone  # cắt cứng, không "..."
 
     def paint(self, painter, option, index):
         # Bỏ tô nền/focus mặc định; vùng chọn được vẽ bằng lớp phủ trong suốt
@@ -44,18 +157,27 @@ class SpreadsheetView(QTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
+        self._h_header = FilterHeaderView(self)
+        self._v_header = RowHeaderView(self)
+        self.setHorizontalHeader(self._h_header)
+        self.setVerticalHeader(self._v_header)
         self.setItemDelegate(CellDelegate(self))
         self.setShowGrid(True)
-        self.setFrameShape(QFrame.NoFrame)  # khớp với overlay freeze (không lệch 1px)
+        self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet(
-            "QTableView { gridline-color: #d9d9d9; }"
-            "QHeaderView::section { background-color: #f5f6f7; border: none;"
-            " border-right: 1px solid #d9d9d9; border-bottom: 1px solid #d9d9d9;"
-            " padding: 2px 4px; color: #3c4043; }"
-            "QTableCornerButton::section { background-color: #f5f6f7; border: none;"
-            " border-right: 1px solid #d9d9d9; border-bottom: 1px solid #d9d9d9; }"
+            # Grid lines màu xám nhạt kiểu Excel
+            "QTableView { gridline-color: #D0D0D0; }"
+            # Header Excel style
+            "QHeaderView::section {"
+            "  background-color: #F3F3F3; border: none;"
+            "  border-right: 1px solid #D0D0D0; border-bottom: 1px solid #D0D0D0;"
+            "  padding: 2px 6px; font-size: 12px; color: #595959; }"
+            "QTableCornerButton::section {"
+            "  background-color: #F3F3F3; border: none;"
+            "  border-right: 1px solid #D0D0D0; border-bottom: 1px solid #D0D0D0; }"
         )
-        self.verticalHeader().setDefaultSectionSize(24)
+        self.verticalHeader().setDefaultSectionSize(20)
+        self.horizontalHeader().setDefaultSectionSize(64)
         self._filling = False
         self._src: tuple[int, int, int, int] | None = None
         self._dst: tuple[int, int, int, int] | None = None
@@ -256,12 +378,26 @@ class SpreadsheetView(QTableView):
                 r, c = r + dr, c + dc
         return r, c
 
+    def _update_header_highlight(self) -> None:
+        """Cập nhật set cột/hàng được chọn để header highlight như Excel."""
+        idxs = self.selectionModel().selectedIndexes() if self.selectionModel() else []
+        cols = {i.column() for i in idxs}
+        rows = {i.row() for i in idxs}
+        # Thêm ô current nếu không có selection rộng
+        cur = self.currentIndex() if self.selectionModel() else None
+        if cur and cur.isValid():
+            cols.add(cur.column())
+            rows.add(cur.row())
+        self._h_header.set_selected_cols(cols)
+        self._v_header.set_selected_rows(rows)
+
     def setSelectionModel(self, model):
         super().setSelectionModel(model)
         if model is not None:
-            # Vẽ lại toàn viewport khi đổi vùng chọn -> không sót lớp phủ ô cũ.
             model.selectionChanged.connect(lambda *a: self.viewport().update())
+            model.selectionChanged.connect(lambda *a: self._update_header_highlight())
             model.currentChanged.connect(lambda *a: self.viewport().update())
+            model.currentChanged.connect(lambda *a: self._update_header_highlight())
 
     def eventFilter(self, obj, event):
         if obj is getattr(self, "_corner_btn", None) and event.type() == QEvent.MouseButtonDblClick:
@@ -308,10 +444,10 @@ class SpreadsheetView(QTableView):
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(rect)
 
-        # Núm kéo: chấm tròn xanh ở góc dưới-phải (ẩn khi đang kéo).
+        # Núm kéo: chấm vuông xanh Excel ở góc dưới-phải (ẩn khi đang kéo).
         if not self._filling:
             center = rect.bottomRight()
-            painter.setPen(QPen(QColor("#ffffff"), 1))
+            painter.setPen(Qt.NoPen)
             painter.setBrush(_BLUE)
-            painter.drawEllipse(center, 4, 4)
+            painter.drawRect(center.x() - 3, center.y() - 3, 6, 6)
         painter.end()
