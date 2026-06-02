@@ -12,6 +12,12 @@ phiên bản theo [SemVer].
 - **Cập nhật**: sửa lỗi `SSL: CERTIFICATE_VERIFY_FAILED` (unable to get local
   issuer certificate) khi kiểm tra/tải cập nhật trên máy khác. App nay xác thực
   HTTPS bằng kho chứng chỉ Windows (`truststore`), dự phòng `certifi`.
+- **Giao diện**: sửa popup dropdown (phông chữ, cỡ chữ) bị nền đen không đọc
+  được — nay nền trắng, chữ đen, dòng chọn xanh.
+
+### Cải thiện
+- Chọn ô mượt hơn: cache QIcon theo (tên, màu, cỡ) nên không render lại SVG
+  mỗi lần đồng bộ toolbar khi đổi ô.
 
 ## [0.10.0] - 2026-06-02
 

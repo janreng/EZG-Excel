@@ -123,7 +123,19 @@ _TEMPLATE = (
 )
 
 
+_ICON_CACHE: dict[tuple[str, str, int], QIcon] = {}
+
+
 def make_icon(name: str, color: str = "#444746", size: int = 20) -> QIcon:
+    """Sinh QIcon từ path; có cache theo (name, color, size).
+
+    Render SVG khá tốn, mà nhiều chỗ (toolbar, đồng bộ khi chọn ô) gọi lặp lại
+    cùng một icon — cache để tránh dựng pixmap mỗi lần (chọn ô mượt hơn).
+    """
+    key = (name, color, size)
+    cached = _ICON_CACHE.get(key)
+    if cached is not None:
+        return cached
     svg = _TEMPLATE.format(color=color, d=PATHS[name])
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
     pix = QPixmap(size, size)
@@ -131,4 +143,6 @@ def make_icon(name: str, color: str = "#444746", size: int = 20) -> QIcon:
     painter = QPainter(pix)
     renderer.render(painter)
     painter.end()
-    return QIcon(pix)
+    icon = QIcon(pix)
+    _ICON_CACHE[key] = icon
+    return icon

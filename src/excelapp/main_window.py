@@ -117,11 +117,17 @@ class _RibbonBar(QWidget):
             "QToolButton:pressed { background: #CCCCCC; }"
             "QToolButton:checked { background: #D9EAD3; color: #217346; }"
             "QComboBox  { border: 1px solid #D0D0D0; background: white;"
-            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; }"
+            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; color: #1c1c1c; }"
             "QComboBox:hover { border-color: #217346; }"
             "QFontComboBox { border: 1px solid #D0D0D0; background: white;"
-            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; }"
+            "  padding: 2px 4px; border-radius: 2px; font-size: 12px; color: #1c1c1c; }"
             "QFontComboBox:hover { border-color: #217346; }"
+            # Popup danh sách của combo: nền trắng, chữ đen (nếu không style sẽ
+            # đen xì do stylesheet một phần). Áp cho cả QComboBox & QFontComboBox.
+            "QComboBox QAbstractItemView {"
+            "  background: white; color: #1c1c1c; border: 1px solid #D0D0D0;"
+            "  selection-background-color: #217346; selection-color: white;"
+            "  outline: none; }"
         )
         self._hlay = QHBoxLayout(self)
         self._hlay.setContentsMargins(6, 0, 6, 0)
