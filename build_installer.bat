@@ -18,4 +18,4 @@ if not exist "%ISCC%" (
 
 "%ISCC%" installer.iss
 echo.
-echo Hoan tat. Bo cai dat nam o: installer\EZG-Excel-Setup-0.8.0.exe
+echo Hoan tat. Bo cai dat nam o thu muc: installer\
