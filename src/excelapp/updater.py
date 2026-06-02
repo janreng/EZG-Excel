@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import urllib.request
 
 from PySide6.QtCore import QThread, Signal
@@ -20,6 +21,36 @@ GITHUB_REPO = "EZG-Excel"
 
 _API = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
 _TIMEOUT = 15
+
+_ssl_ctx: ssl.SSLContext | None = None
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Tạo SSL context xác thực được chứng chỉ HTTPS trên mọi máy.
+
+    Khi đóng gói bằng PyInstaller, Python không tự tìm thấy kho CA của hệ thống
+    nên xác thực HTTPS hay lỗi ``CERTIFICATE_VERIFY_FAILED``. Ưu tiên dùng
+    ``truststore`` (kho chứng chỉ của Windows — hợp cả môi trường công ty), nếu
+    không có thì dùng CA bundle của ``certifi``, cuối cùng mới về mặc định.
+    """
+    global _ssl_ctx
+    if _ssl_ctx is not None:
+        return _ssl_ctx
+    try:
+        import truststore
+
+        _ssl_ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        return _ssl_ctx
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import certifi
+
+        _ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        return _ssl_ctx
+    except Exception:  # noqa: BLE001
+        _ssl_ctx = ssl.create_default_context()
+        return _ssl_ctx
 
 
 class UpdateError(Exception):
@@ -47,7 +78,7 @@ def check_latest() -> dict:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise UpdateError(str(exc))
@@ -86,9 +117,9 @@ class DownloadThread(QThread):
             req = urllib.request.Request(
                 self._url, headers={"User-Agent": "EZG-Excel-Updater"}
             )
-            with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp, open(
-                self._dest, "wb"
-            ) as f:
+            with urllib.request.urlopen(
+                req, timeout=_TIMEOUT, context=_ssl_context()
+            ) as resp, open(self._dest, "wb") as f:
                 total = int(resp.headers.get("Content-Length", 0))
                 read = 0
                 while True:

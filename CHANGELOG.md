@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.10.1] - 2026-06-02
+
+### Sửa lỗi
+- **Cập nhật**: sửa lỗi `SSL: CERTIFICATE_VERIFY_FAILED` (unable to get local
+  issuer certificate) khi kiểm tra/tải cập nhật trên máy khác. App nay xác thực
+  HTTPS bằng kho chứng chỉ Windows (`truststore`), dự phòng `certifi`.
+
 ## [0.10.0] - 2026-06-02
 
 ### Thêm mới

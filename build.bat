@@ -18,6 +18,9 @@ echo === Dong goi (onedir) ===
   --icon assets\icon.ico ^
   --add-data "assets\icon.ico;assets" ^
   --paths src ^
+  --collect-all certifi ^
+  --collect-all truststore ^
+  --hidden-import truststore ^
   run.py
 
 echo.

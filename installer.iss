@@ -2,7 +2,7 @@
 ; Compile: build_installer.bat  (or open with Inno Setup Compiler).
 
 #define MyAppName "EZG - Excel"
-#define MyAppVersion "0.10.0"
+#define MyAppVersion "0.10.1"
 #define MyAppPublisher "EZG"
 #define MyAppExeName "EZG-Excel.exe"
 
