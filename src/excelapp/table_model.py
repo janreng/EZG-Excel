@@ -43,6 +43,7 @@ class SpreadsheetModel(QAbstractTableModel):
         super().__init__(parent)
         self._data: list[list[str]] = rows or [[""] * 26 for _ in range(50)]
         self._merges: list[tuple[int, int, int, int]] = []  # vùng ô gộp
+        self._cond_rules: list[dict] = []  # quy tắc định dạng có điều kiện
         self._eval_cache: dict[tuple[int, int], object] = {}
         self._computing: set[tuple[int, int]] = set()
         self._fmt: dict[tuple[int, int], dict] = {}  # định dạng theo ô
@@ -81,12 +82,48 @@ class SpreadsheetModel(QAbstractTableModel):
         if role == Qt.FontRole:
             return self._font(row, col)
         if role == Qt.BackgroundRole:
+            rule = self._matching_rule(row, col)
+            if rule and rule.get("bg"):
+                return QColor(rule["bg"])
             bg = self._fmt.get((row, col), {}).get("bg")
             return QColor(bg) if bg else None
         if role == Qt.ForegroundRole:
+            rule = self._matching_rule(row, col)
+            if rule and rule.get("color"):
+                return QColor(rule["color"])
             color = self._fmt.get((row, col), {}).get("color")
             return QColor(color) if color else None
         return None
+
+    # ------------------------------------------------------------ điều kiện
+    def _matching_rule(self, row: int, col: int):
+        """Quy tắc định dạng có điều kiện khớp ô (rule thêm sau ưu tiên), hoặc None."""
+        for rule in reversed(self._cond_rules):
+            t, l, b, r = rule["box"]
+            if t <= row <= b and l <= col <= r and self._cond_match(row, col, rule):
+                return rule
+        return None
+
+    def _cond_match(self, row: int, col: int, rule: dict) -> bool:
+        value = self._cell_value(row, col)
+        op = rule["op"]
+        if op == "contains":
+            return str(rule.get("v1", "")).lower() in _format(value).lower()
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            return False
+        v1 = rule.get("v1")
+        v2 = rule.get("v2")
+        if op == "gt":
+            return num > v1
+        if op == "lt":
+            return num < v1
+        if op == "eq":
+            return num == v1
+        if op == "between":
+            return v1 <= num <= v2
+        return False
 
     def _alignment(self, row: int, col: int):
         fmt = self._fmt.get((row, col), {})
@@ -358,6 +395,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._data = rows if rows else [[""] * 26 for _ in range(50)]
         self._fmt = {}
         self._merges = []
+        self._cond_rules = []
         self._eval_cache.clear()
         self._undo.clear()
         self._redo.clear()
@@ -508,6 +546,29 @@ class SpreadsheetModel(QAbstractTableModel):
         else:
             self.merge_cells(box)
 
+    # ------------------------------------------------------------ định dạng có điều kiện
+    def cond_rules(self) -> list[dict]:
+        return [dict(r) for r in self._cond_rules]
+
+    def add_cond_rule(self, rule: dict) -> None:
+        """Thêm quy tắc tô màu theo điều kiện. rule: {box, op, v1, [v2], bg, [color]}."""
+        self._push_undo(self._full_snapshot())
+        self._cond_rules.append(dict(rule))
+        t, l, b, r = rule["box"]
+        self.dataChanged.emit(self.index(t, l), self.index(b, r), [])
+
+    def clear_cond_rules(self, box: tuple[int, int, int, int] | None = None) -> None:
+        """Xóa quy tắc giao với ``box`` (hoặc tất cả nếu box=None)."""
+        if box is None:
+            hit = list(self._cond_rules)
+        else:
+            hit = [r for r in self._cond_rules if _boxes_overlap(r["box"], box)]
+        if not hit:
+            return
+        self._push_undo(self._full_snapshot())
+        self._cond_rules = [r for r in self._cond_rules if r not in hit]
+        self.layoutChanged.emit()
+
     # ------------------------------------------------------------ undo / redo
     #
     # Stack entries (tagged tuples):
@@ -517,7 +578,8 @@ class SpreadsheetModel(QAbstractTableModel):
 
     def _full_snapshot(self) -> tuple:
         return ("snapshot", [list(r) for r in self._data],
-                {k: dict(v) for k, v in self._fmt.items()}, list(self._merges))
+                {k: dict(v) for k, v in self._fmt.items()}, list(self._merges),
+                [dict(rule) for rule in self._cond_rules])
 
     def _push_undo(self, entry: tuple) -> None:
         self._undo.append(entry)
@@ -555,11 +617,12 @@ class SpreadsheetModel(QAbstractTableModel):
     def _apply_entry(self, entry: tuple, direction: str) -> None:
         kind = entry[0]
         if kind == "snapshot":
-            _, data, fmt, merges = entry
+            _, data, fmt, merges, cond = entry
             self.beginResetModel()
             self._data = data
             self._fmt = fmt
             self._merges = list(merges)
+            self._cond_rules = [dict(r) for r in cond]
             self._eval_cache.clear()
             self._rebuild_deps()
             self.endResetModel()

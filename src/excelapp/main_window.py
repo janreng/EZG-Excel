@@ -427,6 +427,11 @@ class MainWindow(QMainWindow):
         )
         self.btn_merge = self._ribbon_btn(
             sec_cell, "merge", tr("merge_tip"), self._toggle_merge)
+        self.btn_cond = self._ribbon_menu(
+            sec_cell, "cond_format", tr("cond_tip"),
+            [("cond_add", self.show_conditional_format),
+             ("cond_clear", self._clear_conditional)],
+        )
 
         # ---- Section: Căn lề ----
         sec_align = self._ribbon.add_section(tr("sec_alignment"))
@@ -556,6 +561,77 @@ class MainWindow(QMainWindow):
         if box is None:
             return
         self.model.toggle_merge(box)
+
+    def _clear_conditional(self) -> None:
+        self.model.clear_cond_rules(self._selection_box())
+
+    def show_conditional_format(self) -> None:
+        """Hộp thoại thêm quy tắc tô màu theo điều kiện cho vùng đang chọn."""
+        box = self._selection_box()
+        if box is None:
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("cond_title"))
+        lay = QVBoxLayout(dlg)
+
+        op_combo = QComboBox()
+        for key, label in [("gt", tr("cond_gt")), ("lt", tr("cond_lt")),
+                           ("eq", tr("cond_eq")), ("between", tr("cond_between")),
+                           ("contains", tr("cond_contains"))]:
+            op_combo.addItem(label, key)
+        lay.addWidget(op_combo)
+
+        v1 = QLineEdit()
+        v1.setPlaceholderText(tr("cond_value"))
+        v2 = QLineEdit()
+        v2.setPlaceholderText(tr("cond_value2"))
+        lay.addWidget(v1)
+        lay.addWidget(v2)
+
+        chosen = {"bg": "#FFC7CE"}  # đỏ nhạt kiểu Excel
+        color_btn = QPushButton(tr("cond_pick_color"))
+        color_btn.setStyleSheet(f"background:{chosen['bg']}")
+
+        def pick():
+            c = QColorDialog.getColor(QColor(chosen["bg"]), dlg, tr("fill_color"))
+            if c.isValid():
+                chosen["bg"] = c.name()
+                color_btn.setStyleSheet(f"background:{c.name()}")
+
+        color_btn.clicked.connect(pick)
+        lay.addWidget(color_btn)
+
+        def upd():
+            v2.setVisible(op_combo.currentData() == "between")
+
+        op_combo.currentIndexChanged.connect(upd)
+        upd()
+
+        row = QHBoxLayout()
+        ok_btn = QPushButton(tr("ok"))
+        cancel_btn = QPushButton(tr("cancel"))
+        row.addStretch()
+        row.addWidget(ok_btn)
+        row.addWidget(cancel_btn)
+        lay.addLayout(row)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn.clicked.connect(dlg.reject)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+        op = op_combo.currentData()
+        rule = {"box": box, "op": op, "bg": chosen["bg"]}
+        if op == "contains":
+            rule["v1"] = v1.text()
+        else:
+            try:
+                rule["v1"] = float(v1.text().replace(",", "."))
+                if op == "between":
+                    rule["v2"] = float(v2.text().replace(",", "."))
+            except ValueError:
+                QMessageBox.warning(self, tr("cond_title"), tr("cond_invalid"))
+                return
+        self.model.add_cond_rule(rule)
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
         """Legacy helper — chỉ còn dùng cho menu action."""

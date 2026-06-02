@@ -105,6 +105,11 @@ PATHS: dict[str, str] = {
         "c0 1.1 1.04 1.5 3.24 2.03C14.36 11.56 17 12.22 17 15"
         "c0 1.79-1.47 3.37-3.5 3.82V21h-3v-2.18C8.47 18.37 7 16.79 7 15z"
     ),
+    # ---- định dạng có điều kiện (gradient) ----
+    "cond_format": (
+        "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
+        "m0 16H5V5h14v14zM7 9h2v2H7zm0 4h2v2H7zm4-4h2v2h-2zm0 4h2v2h-2zm4-4h2v2h-2zm0 4h2v2h-2z"
+    ),
     # ---- merge cells (stub) ----
     "merge": (
         "M2 6v12h20V6H2zm9 10H4V8h7v8zm9 0h-7V8h7v8z"
