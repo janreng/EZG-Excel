@@ -1,6 +1,6 @@
 @echo off
-REM Dong goi EZG - Excel thanh dang THU MUC (onedir) + icon.
-REM Ket qua: dist\EZG-Excel\EZG-Excel.exe (mo nhanh, dung de tao installer).
+REM Dong goi Ezcel thanh dang THU MUC (onedir) + icon.
+REM Ket qua: dist\Ezcel\Ezcel.exe (mo nhanh, dung de tao installer).
 cd /d "%~dp0"
 
 echo === Tao icon ===
@@ -11,7 +11,7 @@ echo === Cai PyInstaller (neu chua co) ===
 
 echo === Dong goi (onedir) ===
 ".venv\Scripts\python.exe" -m PyInstaller ^
-  --name "EZG-Excel" ^
+  --name "Ezcel" ^
   --windowed ^
   --noconfirm ^
   --clean ^
@@ -24,4 +24,4 @@ echo === Dong goi (onedir) ===
   run.py
 
 echo.
-echo Hoan tat. Ung dung nam o: dist\EZG-Excel\EZG-Excel.exe
+echo Hoan tat. Ung dung nam o: dist\Ezcel\Ezcel.exe

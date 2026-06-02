@@ -218,15 +218,20 @@ class SpreadsheetView(QTableView):
 
     # ------------------------------------------------------------ vùng chọn
     def _selection_box(self) -> tuple[int, int, int, int] | None:
-        indexes = self.selectionModel().selectedIndexes()
-        if not indexes:
+        # Bounding-box theo range (O(số vùng)) — tránh selectedIndexes() liệt kê
+        # từng ô; hàm này chạy trong paintEvent/mouse nên phải nhẹ.
+        sm = self.selectionModel()
+        sel = sm.selection() if sm else None
+        if not sel or sel.isEmpty():
             idx = self.currentIndex()
             if not idx.isValid():
                 return None
             return (idx.row(), idx.column(), idx.row(), idx.column())
-        rows = [i.row() for i in indexes]
-        cols = [i.column() for i in indexes]
-        return (min(rows), min(cols), max(rows), max(cols))
+        top = min(r.top() for r in sel)
+        left = min(r.left() for r in sel)
+        bottom = max(r.bottom() for r in sel)
+        right = max(r.right() for r in sel)
+        return (top, left, bottom, right)
 
     def _box_rect(self, box: tuple[int, int, int, int]) -> QRect:
         top, left, bottom, right = box

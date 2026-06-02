@@ -1,17 +1,17 @@
-; Inno Setup script for EZG - Excel.
+; Inno Setup script for Ezcel.
 ; Compile: build_installer.bat  (or open with Inno Setup Compiler).
 
-#define MyAppName "EZG - Excel"
-#define MyAppVersion "0.10.1"
+#define MyAppName "Ezcel"
+#define MyAppVersion "0.11.0"
 #define MyAppPublisher "EZG"
-#define MyAppExeName "EZG-Excel.exe"
+#define MyAppExeName "Ezcel.exe"
 
 [Setup]
 AppId={{A3F5C1E2-9B4D-4E7A-8C21-6D3F0B9E2A14}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\EZG-Excel
+DefaultDirName={autopf}\Ezcel
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ; Per-user install (no admin needed). Change 'lowest' -> 'admin' and
@@ -32,11 +32,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
-Name: "contextmenu"; Description: "Add ""Open with EZG - Excel"" to the right-click menu for .csv/.xlsx files"; GroupDescription: "Integration:"; Flags: unchecked
+Name: "contextmenu"; Description: "Add ""Open with Ezcel"" to the right-click menu for .csv/.xlsx files"; GroupDescription: "Integration:"; Flags: unchecked
 
 [Files]
 ; Bundle the whole onedir folder produced by PyInstaller.
-Source: "dist\EZG-Excel\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\Ezcel\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -46,13 +46,13 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Registry]
 ; Optional: add an "Open with EZG - Excel" entry to the right-click menu
 ; (does NOT change the default program, so no conflict with Excel).
-Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\EZGExcel"; \
-    ValueType: string; ValueData: "Open with EZG - Excel"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\EZGExcel\command"; \
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\Ezcel"; \
+    ValueType: string; ValueData: "Open with Ezcel"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.csv\shell\Ezcel\command"; \
     ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xlsx\shell\EZGExcel"; \
-    ValueType: string; ValueData: "Open with EZG - Excel"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xlsx\shell\EZGExcel\command"; \
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xlsx\shell\Ezcel"; \
+    ValueType: string; ValueData: "Open with Ezcel"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xlsx\shell\Ezcel\command"; \
     ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
 [Run]

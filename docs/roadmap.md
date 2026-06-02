@@ -1,10 +1,10 @@
-# Roadmap: Phát triển EZG - Excel tiến gần Microsoft Excel
+# Roadmap: Phát triển Ezcel tiến gần Microsoft Excel
 
 > Bản Markdown để AI thực thi. Bản HTML để đọc trực quan: [roadmap.html](roadmap.html).
 
 ## Context (Bối cảnh)
 
-EZG - Excel (`d:\Python\excel`) là một spreadsheet PySide6 đã khá hoàn chỉnh: formula engine 17 hàm, undo/redo 100 mức, freeze panes, filter, sort, autofill (fill handle kiểu Google Sheets), find/replace, i18n Việt/Anh, auto-update qua GitHub. Tuy nhiên so với Microsoft Excel còn thiếu nhiều mảng lớn.
+Ezcel (`d:\Python\excel`) là một spreadsheet PySide6 đã khá hoàn chỉnh: formula engine 17 hàm, undo/redo 100 mức, freeze panes, filter, sort, autofill (fill handle kiểu Google Sheets), find/replace, i18n Việt/Anh, auto-update qua GitHub. Tuy nhiên so với Microsoft Excel còn thiếu nhiều mảng lớn.
 
 Phát triển **4 nhóm tính năng**, theo dạng roadmap toàn diện:
 1. **Mở rộng hàm công thức** (Excel 400+, app mới 17)

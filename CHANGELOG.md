@@ -1,10 +1,21 @@
 # Changelog
 
-Mọi thay đổi đáng chú ý của EZG - Excel. Định dạng theo [Keep a Changelog],
+Mọi thay đổi đáng chú ý của Ezcel. Định dạng theo [Keep a Changelog],
 phiên bản theo [SemVer].
 
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
+
+## [0.11.0] - 2026-06-02
+
+### Thay đổi
+- **Đổi tên ứng dụng** từ "EZG - Excel" thành **Ezcel** (tên hiển thị, exe,
+  bộ cài). Giữ nguyên AppId nên cài đè được lên bản cũ; kho GitHub vẫn là
+  `EZG-Excel` (auto-update không đổi).
+
+### Cải thiện
+- Chọn ô/vùng mượt hơn: lấy bounding-box theo *range* thay vì liệt kê từng ô
+  (`selectedIndexes()`) — chọn cả cột/hàng không còn khựng.
 
 ## [0.10.1] - 2026-06-02
 

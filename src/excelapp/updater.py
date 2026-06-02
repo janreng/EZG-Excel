@@ -74,7 +74,7 @@ def check_latest() -> dict:
         url,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": "EZG-Excel-Updater",
+            "User-Agent": "Ezcel-Updater",
         },
     )
     try:
@@ -115,7 +115,7 @@ class DownloadThread(QThread):
     def run(self) -> None:
         try:
             req = urllib.request.Request(
-                self._url, headers={"User-Agent": "EZG-Excel-Updater"}
+                self._url, headers={"User-Agent": "Ezcel-Updater"}
             )
             with urllib.request.urlopen(
                 req, timeout=_TIMEOUT, context=_ssl_context()

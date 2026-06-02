@@ -48,7 +48,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "lang_en": {"vi": "Tiếng Anh", "en": "English"},
     # --- menu: Trợ giúp ---
     "menu_help": {"vi": "&Trợ giúp", "en": "&Help"},
-    "about": {"vi": "Giới thiệu EZG - Excel", "en": "About EZG - Excel"},
+    "about": {"vi": "Giới thiệu Ezcel", "en": "About Ezcel"},
     "check_updates": {"vi": "Kiểm tra cập nhật...", "en": "Check for updates..."},
     "checking_updates": {"vi": "Đang kiểm tra cập nhật...", "en": "Checking for updates..."},
     "up_to_date": {
@@ -236,12 +236,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "menu_settings": {"vi": "&Cài đặt", "en": "&Settings"},
     "about_body": {
         "vi": (
-            "<h3>EZG - Excel</h3><p>Phiên bản <b>{ver}</b></p>"
+            "<h3>Ezcel</h3><p>Phiên bản <b>{ver}</b></p>"
             "<p>Ứng dụng bảng tính đơn giản — đọc/ghi CSV &amp; XLSX, "
             "công thức, AutoFill.</p><p>Xây dựng bằng Python + PySide6.</p>"
         ),
         "en": (
-            "<h3>EZG - Excel</h3><p>Version <b>{ver}</b></p>"
+            "<h3>Ezcel</h3><p>Version <b>{ver}</b></p>"
             "<p>A simple spreadsheet app — read/write CSV &amp; XLSX, "
             "formulas, AutoFill.</p><p>Built with Python + PySide6.</p>"
         ),

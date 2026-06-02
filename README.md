@@ -1,4 +1,4 @@
-# EZG - Excel
+# Ezcel
 
 Ứng dụng bảng tính đơn giản (kiểu Excel) viết bằng Python + PySide6.
 Đọc/ghi **CSV** và **XLSX**, hỗ trợ công thức cơ bản.
@@ -84,8 +84,8 @@ Hoặc mở kèm file: `run.bat duongdan\file.xlsx`
 build.bat
 ```
 
-Tạo dạng **thư mục**: `dist\EZG-Excel\EZG-Excel.exe` (kèm thư mục `_internal`).
-Mở nhanh, có sẵn icon. Copy cả thư mục `dist\EZG-Excel` sang máy khác là chạy được.
+Tạo dạng **thư mục**: `dist\Ezcel\Ezcel.exe` (kèm thư mục `_internal`).
+Mở nhanh, có sẵn icon. Copy cả thư mục `dist\Ezcel` sang máy khác là chạy được.
 
 ## Tạo bộ cài đặt (Setup.exe)
 
@@ -96,11 +96,11 @@ Cần [Inno Setup](https://jrsoftware.org/isinfo.php)
 build_installer.bat
 ```
 
-Tạo ra `installer\EZG-Excel-Setup-0.8.0.exe`. Bộ cài đặt này:
+Tạo ra `installer\Ezcel-Setup-<ver>.exe`. Bộ cài đặt này:
 
 - Cài vào thư mục người dùng (không cần quyền admin)
 - Tạo shortcut Start Menu, tùy chọn Desktop
-- Tùy chọn thêm "Open with EZG - Excel" vào menu chuột phải của `.csv`/`.xlsx`
+- Tùy chọn thêm "Open with Ezcel" vào menu chuột phải của `.csv`/`.xlsx`
   (không thay chương trình mặc định nên không tranh chấp với Excel)
 - Có sẵn trình gỡ cài đặt
 

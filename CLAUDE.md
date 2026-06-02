@@ -6,7 +6,7 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này.
 
 ## Tổng quan
 
-**EZG - Excel** — ứng dụng bảng tính kiểu Excel viết bằng Python + PySide6. Đọc/ghi CSV và XLSX, có formula engine, undo/redo, freeze panes, filter, sort, autofill, đa ngôn ngữ Việt/Anh, auto-update qua GitHub Releases.
+**Ezcel** — ứng dụng bảng tính kiểu Excel viết bằng Python + PySide6. Đọc/ghi CSV và XLSX, có formula engine, undo/redo, freeze panes, filter, sort, autofill, đa ngôn ngữ Việt/Anh, auto-update qua GitHub Releases.
 
 - Python 3.10+ (máy dev dùng 3.14; PySide6 dùng wheel `abi3` nên chạy được trên 3.14).
 - PySide6 ≥ 6.10, openpyxl ≥ 3.1, pandas ≥ 2.0, pillow (sinh icon), pyinstaller (build).
@@ -25,10 +25,10 @@ run.bat
 .venv\Scripts\python run.py duongdan\file.xlsx   :: mở kèm file
 
 :: Đóng gói .exe (PyInstaller)
-build.bat                  :: -> dist\EZG-Excel\EZG-Excel.exe
+build.bat                  :: -> dist\Ezcel\Ezcel.exe
 
 :: Tạo bộ cài (cần Inno Setup)
-build_installer.bat        :: -> installer\EZG-Excel-Setup-<ver>.exe
+build_installer.bat        :: -> installer\Ezcel-Setup-<ver>.exe
 
 :: Chạy test (sau khi có thư mục tests/)
 .venv\Scripts\python -m pytest tests/
@@ -93,6 +93,23 @@ self._undo / self._redo: list[tuple]        # snapshot (_data, _fmt), tối đa 
    không thêm `requests`. Tránh thêm dependency nặng nếu không thật cần.
 6. Code mới **giống code xung quanh**: type hint nhẹ, `from __future__ import annotations`,
    docstring/comment tiếng Việt ngắn gọn.
+7. **Ưu tiên hiệu năng — chọn cách tối ưu nhất có thể.** Đây là app bảng tính tương tác,
+   mọi thao tác phải mượt kể cả lưới lớn. Khi viết/sửa code, mặc định chọn giải pháp tốn ít
+   tài nguyên nhất, đặc biệt trên các đường nóng (hot path):
+   - **Hot path = chạy rất nhiều lần**: `data()`/delegate `paint()` (mỗi ô × mỗi lần repaint),
+     `paintEvent`, handler của `selectionChanged`/`currentChanged`/`mouseMoveEvent`, vòng quét
+     toàn lưới. Trong các chỗ này **không** cấp phát thừa, **không** tạo list/set lớn, **không**
+     gọi `selectedIndexes()` (nó liệt kê TỪNG ô — chọn cả cột = hàng vạn QModelIndex). Lấy
+     bounding-box từ `selectionModel().selection()` (theo *range*, O(số vùng)) thay vì duyệt ô.
+   - **Tính một lần, dùng lại**: cache kết quả đắt (đã có `_eval_cache`, `_font_cache`); ưu tiên
+     **vô hiệu hóa chọn lọc** theo đồ thị phụ thuộc (như `setData`→`_recalculate(changed)`) thay
+     vì `clear()` cả cache rồi vẽ lại toàn bộ. Tránh `_rebuild_deps()` quét toàn lưới nếu chỉ
+     đổi cục bộ.
+   - **Đo trước khi tối ưu chỗ phức tạp**: với thay đổi ảnh hưởng hiệu năng, ước lượng độ phức
+     tạp theo (số ô × số lần gọi) và kiểm chứng bằng test headless (`QT_QPA_PLATFORM=offscreen`)
+     trên lưới lớn (vd 1000×100). Đừng tối ưu sớm chỗ chạy hiếm (IO, hộp thoại) đến mức rối code.
+   - Cân bằng với nguyên tắc 1 & 6: tối ưu **không** được phá ranh giới module hay làm code khó
+     đọc. Nếu phải đánh đổi rõ rệt, ghi chú lý do bằng comment ngắn.
 
 ## Cách thêm tính năng (recipes)
 

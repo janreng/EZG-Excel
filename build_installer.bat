@@ -1,10 +1,10 @@
 @echo off
-REM Tao bo cai dat EZG-Excel-Setup.exe tu thu muc dist\EZG-Excel.
+REM Tao bo cai dat Ezcel-Setup.exe tu thu muc dist\Ezcel.
 REM Yeu cau: da chay build.bat truoc do, va da cai Inno Setup.
 cd /d "%~dp0"
 
-if not exist "dist\EZG-Excel\EZG-Excel.exe" (
-  echo [LOI] Chua co dist\EZG-Excel\EZG-Excel.exe. Hay chay build.bat truoc.
+if not exist "dist\Ezcel\Ezcel.exe" (
+  echo [LOI] Chua co dist\Ezcel\Ezcel.exe. Hay chay build.bat truoc.
   exit /b 1
 )
 

@@ -1236,15 +1236,19 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ điền (fill)
     def _selection_box(self):
-        indexes = self.view.selectionModel().selectedIndexes()
-        if not indexes:
+        # Lấy bounding-box theo *range* (O(số vùng)) thay vì duyệt từng ô —
+        # selectedIndexes() liệt kê mọi ô nên chọn cả cột = hàng vạn index.
+        sel = self.view.selectionModel().selection()
+        if sel.isEmpty():
             idx = self.view.currentIndex()
             if not idx.isValid():
                 return None
             return (idx.row(), idx.column(), idx.row(), idx.column())
-        rows = [i.row() for i in indexes]
-        cols = [i.column() for i in indexes]
-        return (min(rows), min(cols), max(rows), max(cols))
+        top = min(r.top() for r in sel)
+        left = min(r.left() for r in sel)
+        bottom = max(r.bottom() for r in sel)
+        right = max(r.right() for r in sel)
+        return (top, left, bottom, right)
 
     def fill_down(self) -> None:
         box = self._selection_box()

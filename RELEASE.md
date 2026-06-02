@@ -15,16 +15,16 @@ Sửa cùng một số ở 2 nơi:
 build.bat
 build_installer.bat
 ```
-→ tạo `installer\EZG-Excel-Setup-<version>.exe`
+→ tạo `installer\Ezcel-Setup-<version>.exe`
 
 ## 3. Tạo GitHub Release
 Dùng web GitHub (Releases → Draft a new release) hoặc CLI `gh`:
 ```bat
-gh release create v0.8.0 "installer\EZG-Excel-Setup-0.8.0.exe" --title "v0.8.0" --notes "Mô tả thay đổi"
+gh release create v0.11.0 "installer\Ezcel-Setup-0.11.0.exe" --title "v0.11.0" --notes-file CHANGELOG.md
 ```
 Yêu cầu:
 - **Tag** đặt theo phiên bản, vd `v0.8.0` (app tự bỏ chữ `v` khi so sánh).
-- **Đính kèm** file `EZG-Excel-Setup-<version>.exe` làm asset (app tìm file `.exe`).
+- **Đính kèm** file `Ezcel-Setup-<version>.exe` làm asset (app tìm file `.exe`).
 
 ## 4. Người dùng cập nhật
 Trên máy đã cài bản cũ: **Trợ giúp → Kiểm tra cập nhật** → thấy bản mới →
