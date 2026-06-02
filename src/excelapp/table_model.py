@@ -143,9 +143,10 @@ class SpreadsheetModel(QAbstractTableModel):
             return False
         new = "" if value is None else str(value)
         row, col = index.row(), index.column()
-        if self._data[row][col] == new:
+        old = self._data[row][col]
+        if old == new:
             return True
-        self._push_undo()
+        self._push_undo(("cells", [(row, col, old, new)]))
         self._data[row][col] = new
         self._update_deps(row, col)           # cập nhật dep map cho ô này
         self._recalculate((row, col))         # selective: chỉ dirty ô bị ảnh hưởng
@@ -235,7 +236,7 @@ class SpreadsheetModel(QAbstractTableModel):
     # ------------------------------------------------------------ cấu trúc
     def insertRows(self, row: int, count: int = 1, parent=QModelIndex()) -> bool:
         width = self.columnCount() or 1
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         self.beginInsertRows(QModelIndex(), row, row + count - 1)
         for _ in range(count):
             self._data.insert(row, [""] * width)
@@ -248,7 +249,7 @@ class SpreadsheetModel(QAbstractTableModel):
     def removeRows(self, row: int, count: int = 1, parent=QModelIndex()) -> bool:
         if self.rowCount() - count < 1:
             return False
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         self.beginRemoveRows(QModelIndex(), row, row + count - 1)
         del self._data[row : row + count]
         self._shift_fmt(
@@ -260,7 +261,7 @@ class SpreadsheetModel(QAbstractTableModel):
         return True
 
     def insertColumns(self, col: int, count: int = 1, parent=QModelIndex()) -> bool:
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         self.beginInsertColumns(QModelIndex(), col, col + count - 1)
         for r in self._data:
             for _ in range(count):
@@ -274,7 +275,7 @@ class SpreadsheetModel(QAbstractTableModel):
     def removeColumns(self, col: int, count: int = 1, parent=QModelIndex()) -> bool:
         if self.columnCount() - count < 1:
             return False
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         self.beginRemoveColumns(QModelIndex(), col, col + count - 1)
         for r in self._data:
             del r[col : col + count]
@@ -291,7 +292,7 @@ class SpreadsheetModel(QAbstractTableModel):
         n = self.columnCount()
         if src == dst or not (0 <= src < n) or not (0 <= dst < n):
             return
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         order = list(range(n))
         order.insert(dst, order.pop(src))
         inv = {old: new for new, old in enumerate(order)}
@@ -306,7 +307,7 @@ class SpreadsheetModel(QAbstractTableModel):
         n = self.rowCount()
         if src == dst or not (0 <= src < n) or not (0 <= dst < n):
             return
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         order = list(range(n))
         order.insert(dst, order.pop(src))
         inv = {old: new for new, old in enumerate(order)}
@@ -354,19 +355,26 @@ class SpreadsheetModel(QAbstractTableModel):
         if not attrs:
             return
         top, left, bottom, right = box
-        self._push_undo()
+        cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
         for r in range(top, bottom + 1):
             for c in range(left, right + 1):
-                fmt = dict(self._fmt.get((r, c), {}))
+                old_fmt = dict(self._fmt.get((r, c), {}))
+                new_fmt = dict(old_fmt)
                 for k, v in attrs.items():
                     if v is None:
-                        fmt.pop(k, None)
+                        new_fmt.pop(k, None)
                     else:
-                        fmt[k] = v
-                if fmt:
-                    self._fmt[(r, c)] = fmt
-                else:
-                    self._fmt.pop((r, c), None)
+                        new_fmt[k] = v
+                if new_fmt != old_fmt:
+                    cell_fmts[(r, c)] = (old_fmt, new_fmt)
+        if not cell_fmts:
+            return
+        self._push_undo(("fmt", cell_fmts))
+        for (r, c), (_, new_fmt) in cell_fmts.items():
+            if new_fmt:
+                self._fmt[(r, c)] = new_fmt
+            else:
+                self._fmt.pop((r, c), None)
         self.dataChanged.emit(
             self.index(top, left), self.index(bottom, right), []
         )
@@ -379,11 +387,17 @@ class SpreadsheetModel(QAbstractTableModel):
         return {k: dict(v) for k, v in self._fmt.items()}
 
     # ------------------------------------------------------------ undo / redo
-    def _snapshot(self) -> tuple:
-        return ([list(r) for r in self._data], {k: dict(v) for k, v in self._fmt.items()})
+    #
+    # Stack entries (tagged tuples):
+    #   ("snapshot", data_copy, fmt_copy)   — thao tác cấu trúc (hiếm)
+    #   ("cells",  [(r, c, old, new), ...]) — thay đổi nội dung ô
+    #   ("fmt",    {(r,c): (old_fmt, new_fmt)}) — thay đổi định dạng
 
-    def _push_undo(self) -> None:
-        self._undo.append(self._snapshot())
+    def _full_snapshot(self) -> tuple:
+        return ("snapshot", [list(r) for r in self._data], {k: dict(v) for k, v in self._fmt.items()})
+
+    def _push_undo(self, entry: tuple) -> None:
+        self._undo.append(entry)
         if len(self._undo) > self._undo_limit:
             self._undo.pop(0)
         self._redo.clear()
@@ -397,25 +411,57 @@ class SpreadsheetModel(QAbstractTableModel):
     def undo(self) -> bool:
         if not self._undo:
             return False
-        self._redo.append(self._snapshot())
-        self._apply_snapshot(self._undo.pop())
+        entry = self._undo.pop()
+        # Delta entries carry both old+new — same entry goes to redo stack.
+        # Snapshot entries only carry pre-op state; capture post-undo state for redo.
+        redo_entry = self._full_snapshot() if entry[0] == "snapshot" else entry
+        self._apply_entry(entry, direction="undo")
+        self._redo.append(redo_entry)
         return True
 
     def redo(self) -> bool:
         if not self._redo:
             return False
-        self._undo.append(self._snapshot())
-        self._apply_snapshot(self._redo.pop())
+        entry = self._redo.pop()
+        # Snapshot redo entry already holds the target post-op state (captured by undo).
+        undo_entry = self._full_snapshot() if entry[0] == "snapshot" else entry
+        self._apply_entry(entry, direction="redo")
+        self._undo.append(undo_entry)
         return True
 
-    def _apply_snapshot(self, snapshot: tuple) -> None:
-        data, fmt = snapshot
-        self.beginResetModel()
-        self._data = data
-        self._fmt = fmt
-        self._eval_cache.clear()
-        self._rebuild_deps()
-        self.endResetModel()
+    def _apply_entry(self, entry: tuple, direction: str) -> None:
+        kind = entry[0]
+        if kind == "snapshot":
+            _, data, fmt = entry
+            self.beginResetModel()
+            self._data = data
+            self._fmt = fmt
+            self._eval_cache.clear()
+            self._rebuild_deps()
+            self.endResetModel()
+        elif kind == "cells":
+            _, changes = entry
+            # direction="undo" -> restore old; direction="redo" -> restore new
+            idx = 2 if direction == "undo" else 3  # old=index2, new=index3
+            for r, c, old, new in changes:
+                self._data[r][c] = old if direction == "undo" else new
+            self._rebuild_deps()
+            self._recalculate()
+        elif kind == "fmt":
+            _, cell_fmts = entry
+            idx_restore = 0 if direction == "undo" else 1  # old=0, new=1
+            for (r, c), (old_fmt, new_fmt) in cell_fmts.items():
+                restored = old_fmt if direction == "undo" else new_fmt
+                if restored:
+                    self._fmt[(r, c)] = dict(restored)
+                else:
+                    self._fmt.pop((r, c), None)
+            # Emit bounding box of changed cells
+            rs = [r for r, c in cell_fmts]
+            cs = [c for r, c in cell_fmts]
+            self.dataChanged.emit(
+                self.index(min(rs), min(cs)), self.index(max(rs), max(cs)), []
+            )
 
     # ------------------------------------------------------------ copy / paste / xóa
     def block_raw(self, box: tuple[int, int, int, int]) -> list[list[str]]:
@@ -436,10 +482,17 @@ class SpreadsheetModel(QAbstractTableModel):
 
     def clear_range(self, box: tuple[int, int, int, int]) -> None:
         top, left, bottom, right = box
-        self._push_undo()
-        for r in range(top, bottom + 1):
-            for c in range(left, right + 1):
-                self._data[r][c] = ""
+        changes = [
+            (r, c, self._data[r][c], "")
+            for r in range(top, bottom + 1)
+            for c in range(left, right + 1)
+            if self._data[r][c] != ""
+        ]
+        if not changes:
+            return
+        self._push_undo(("cells", changes))
+        for r, c, _old, new in changes:
+            self._data[r][c] = new
         self._rebuild_deps()
         self._recalculate()
 
@@ -454,21 +507,30 @@ class SpreadsheetModel(QAbstractTableModel):
         tham chiếu tương đối của công thức (dán trong app)."""
         if not block:
             return
-        self._push_undo()
         rows = len(block)
         cols = max(len(r) for r in block)
         need_rows, need_cols = top + rows, left + cols
         grew = need_rows > self.rowCount() or need_cols > self.columnCount()
+        # Capture old values (only cells that exist; grown cells have old="" by definition)
+        changes = []
+        for i, row_ in enumerate(block):
+            for j in range(len(row_)):
+                r_, c_ = top + i, left + j
+                old_v = self._data[r_][c_] if r_ < self.rowCount() and c_ < self.columnCount() else ""
+                changes.append((r_, c_, old_v, None))  # new filled below
         if grew:
             self.beginResetModel()
         self._grow_to(need_rows, need_cols)
-        for i, row in enumerate(block):
+        for idx, (i, row) in enumerate([(i, r) for i, r in enumerate(block)]):
             for j, val in enumerate(row):
                 if src_anchor and formula.is_formula(val):
                     val = formula.offset_formula(
                         val, top - src_anchor[0], left - src_anchor[1]
                     )
                 self._data[top + i][left + j] = val
+        # Fill in new values for delta
+        changes = [(r, c, old, self._data[r][c]) for r, c, old, _ in changes]
+        self._push_undo(("cells", changes))
         self._rebuild_deps()
         if grew:
             self._eval_cache.clear()
@@ -495,21 +557,21 @@ class SpreadsheetModel(QAbstractTableModel):
         """Thay mọi lần xuất hiện của ``find`` trong dữ liệu thô. Trả về số ô đổi."""
         if not find:
             return 0
-        self._push_undo()
-        count = 0
+        changes: list[tuple[int, int, str, str]] = []
         for r in range(len(self._data)):
             for c in range(len(self._data[r])):
                 cell = self._data[r][c]
                 new = _replace_substr(cell, find, repl, match_case)
                 if new != cell:
-                    self._data[r][c] = new
-                    count += 1
-        if count:
-            self._rebuild_deps()
-            self._recalculate()
-        else:
-            self._undo.pop()  # không đổi gì -> bỏ snapshot vừa lưu
-        return count
+                    changes.append((r, c, cell, new))
+        if not changes:
+            return 0
+        self._push_undo(("cells", changes))
+        for r, c, _old, new in changes:
+            self._data[r][c] = new
+        self._rebuild_deps()
+        self._recalculate()
+        return len(changes)
 
     def fill(self, src: tuple[int, int, int, int], dst: tuple[int, int, int, int]) -> None:
         """Kéo-điền (AutoFill) từ vùng nguồn ``src`` ra vùng đích ``dst``.
@@ -520,7 +582,7 @@ class SpreadsheetModel(QAbstractTableModel):
         st, sl, sb, sr = src
         dt, dl, db, dr = dst
         vertical = (dt < st) or (db > sb)  # mở rộng theo hàng -> điền dọc
-        self._push_undo()
+        changes: list[tuple[int, int, str, str]] = []
 
         if vertical:
             for c in range(sl, sr + 1):
@@ -528,14 +590,20 @@ class SpreadsheetModel(QAbstractTableModel):
                 for r in range(dt, db + 1):
                     if st <= r <= sb:
                         continue  # giữ nguyên ô nguồn
-                    self._data[r][c] = self._fill_value(source, r - st, axis="row")
+                    new_v = self._fill_value(source, r - st, axis="row")
+                    changes.append((r, c, self._data[r][c], new_v))
+                    self._data[r][c] = new_v
         else:
             for r in range(dt, db + 1):
                 source = [self._data[r][c] for c in range(sl, sr + 1)]
                 for c in range(dl, dr + 1):
                     if sl <= c <= sr:
                         continue
-                    self._data[r][c] = self._fill_value(source, c - sl, axis="col")
+                    new_v = self._fill_value(source, c - sl, axis="col")
+                    changes.append((r, c, self._data[r][c], new_v))
+                    self._data[r][c] = new_v
+
+        self._push_undo(("cells", changes))
 
         self._rebuild_deps()
         self._eval_cache.clear()
@@ -574,7 +642,7 @@ class SpreadsheetModel(QAbstractTableModel):
         """Sắp xếp các dòng theo giá trị (đã tính) của một cột."""
         if col < 0 or col >= self.columnCount():
             return
-        self._push_undo()
+        self._push_undo(self._full_snapshot())
         self.layoutAboutToBeChanged.emit()
         # Khóa sắp xếp: số đứng trước, rồi đến chuỗi; ô rỗng xuống cuối.
         def key(row_index: int):
