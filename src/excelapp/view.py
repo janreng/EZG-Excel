@@ -68,26 +68,12 @@ class FilterHeaderView(QHeaderView):
             painter.setPen(QPen(_BLUE, 2))
             painter.drawLine(rect.bottomLeft(), rect.bottomRight())
             painter.restore()
-            # Vẽ text thủ công để giữ màu đậm
-            painter.save()
-            painter.setPen(_HDR_SEL_FG)
-            opt = self.styleOptionForIndex(painter, rect, logical)
-            opt.palette.setColor(opt.palette.ButtonText, _HDR_SEL_FG)
-            painter.restore()
         super().paintSection(painter, rect, logical)
         if not self.filter_enabled:
             return
         icon = self._icon_on if logical in self.active else self._icon
         ir = QRect(rect.right() - _ICON - 4, rect.center().y() - _ICON // 2, _ICON, _ICON)
         icon.paint(painter, ir)
-
-    def styleOptionForIndex(self, painter, rect, logical):
-        from PySide6.QtWidgets import QStyleOptionHeader
-        opt = QStyleOptionHeader()
-        self.initStyleOption(opt)
-        opt.rect = rect
-        opt.section = logical
-        return opt
 
     def mousePressEvent(self, event):
         if self.filter_enabled:
@@ -101,7 +87,6 @@ class FilterHeaderView(QHeaderView):
 _BLUE   = QColor("#217346")         # Excel green (selection border & handle)
 _WASH   = QColor(33, 115, 70, 25)  # lớp phủ xanh lá nhạt lên vùng chọn
 _HDR_SEL_BG = QColor("#FFFDE7")    # header highlight khi cột/hàng được chọn
-_HDR_SEL_FG = QColor("#000000")
 _HANDLE = 8                        # cạnh vùng bắt núm kéo (px)
 
 
