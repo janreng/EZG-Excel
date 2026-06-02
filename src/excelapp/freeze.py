@@ -72,6 +72,13 @@ class FreezeManager(QObject):
         self.cols = max(0, cols)
         self._relayout()
 
+    def rebind(self) -> None:
+        """Gắn lại model + selection model cho overlay (khi đổi sheet)."""
+        for v in (self.top, self.left, self.corner):
+            v.setModel(self.main.model())
+            v.setSelectionModel(self.main.selectionModel())
+        self._relayout()
+
     # ------------------------------------------------------------ đồng bộ
     def _on_col_resized(self, idx: int, _old: int, new: int) -> None:
         for v in (self.top, self.left, self.corner):

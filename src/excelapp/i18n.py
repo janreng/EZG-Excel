@@ -176,6 +176,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "numfmt_scientific": {"vi": "Khoa học", "en": "Scientific"},
     # --- gộp ô ---
     "merge_tip": {"vi": "Gộp / bỏ gộp ô", "en": "Merge / unmerge cells"},
+    # --- sheet ---
+    "sheet_add": {"vi": "Thêm sheet", "en": "Add sheet"},
+    "sheet_rename": {"vi": "Đổi tên sheet", "en": "Rename sheet"},
+    "sheet_duplicate": {"vi": "Nhân bản sheet", "en": "Duplicate sheet"},
+    "sheet_delete": {"vi": "Xóa sheet", "en": "Delete sheet"},
+    "sheet_name": {"vi": "Tên sheet:", "en": "Sheet name:"},
+    "sheet_dup": {"vi": "Tên sheet đã tồn tại", "en": "Sheet name already exists"},
+    "sheet_min": {"vi": "Phải còn ít nhất một sheet", "en": "At least one sheet is required"},
     # --- định dạng có điều kiện ---
     "cond_tip": {"vi": "Định dạng có điều kiện", "en": "Conditional formatting"},
     "cond_add": {"vi": "Thêm quy tắc...", "en": "Add rule..."},

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QKeySequenceEdit,
     QLabel,
     QLineEdit,
@@ -141,6 +142,19 @@ class _RibbonBar(QWidget):
 
     def add_stretch(self) -> None:
         self._hlay.addStretch()
+
+
+class _Sheet:
+    """Một sheet trong workbook: model dữ liệu + state UI riêng (lọc, freeze)."""
+
+    __slots__ = ("model", "name", "filters", "freeze_rows", "freeze_cols")
+
+    def __init__(self, model, name: str, filters: dict | None = None):
+        self.model = model
+        self.name = name
+        self.filters = filters if filters is not None else {}
+        self.freeze_rows = 0
+        self.freeze_cols = 0
 
 
 class MainWindow(QMainWindow):
@@ -290,18 +304,21 @@ class MainWindow(QMainWindow):
         self.view.horizontalHeader().sectionDoubleClicked.connect(self._sort_by_header)
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._show_context_menu)
-        self.view.selectionModel().currentChanged.connect(self._on_current_changed)
-        self.view.selectionModel().selectionChanged.connect(self._update_stats)
         self.view.horizontalHeader().filterClicked.connect(self._open_filter_dialog)
+        self._wire_selection()
         layout.addWidget(self.view, 1)
 
         self.freeze = FreezeManager(self.view)
 
-        # ---- Sheet tab bar kiểu Excel (dưới cùng) ----
+        # ---- Sheet tab bar kiểu Excel (dưới cùng) + nút thêm sheet ----
+        tab_row = QWidget()
+        tab_h = QHBoxLayout(tab_row)
+        tab_h.setContentsMargins(0, 0, 0, 0)
+        tab_h.setSpacing(0)
         self.sheet_tabs = QTabBar()
         self.sheet_tabs.setShape(QTabBar.RoundedSouth)
-        self.sheet_tabs.addTab("Sheet1")
         self.sheet_tabs.setExpanding(False)
+        self.sheet_tabs.setMovable(True)
         self.sheet_tabs.setStyleSheet(
             "QTabBar { background: #D9D9D9; border-top: 1px solid #C0C0C0; }"
             "QTabBar::tab {"
@@ -314,7 +331,30 @@ class MainWindow(QMainWindow):
             "  border-bottom: 2px solid #217346; }"
             "QTabBar::tab:hover:!selected { background: #E5E5E5; }"
         )
-        layout.addWidget(self.sheet_tabs)
+        self.sheet_tabs.currentChanged.connect(self._activate_sheet)
+        self.sheet_tabs.tabBarDoubleClicked.connect(self._rename_sheet)
+        self.sheet_tabs.tabMoved.connect(self._on_tab_moved)
+        self.sheet_tabs.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.sheet_tabs.customContextMenuRequested.connect(self._sheet_context_menu)
+        self.btn_add_sheet = QToolButton()
+        self.btn_add_sheet.setText("+")
+        self.btn_add_sheet.setToolTip(tr("sheet_add"))
+        self.btn_add_sheet.setStyleSheet(
+            "QToolButton { background: #D9D9D9; border: none; padding: 2px 10px;"
+            " font-size: 15px; color: #217346; } QToolButton:hover { background: #E5E5E5; }"
+        )
+        self.btn_add_sheet.clicked.connect(self.add_sheet)
+        tab_h.addWidget(self.sheet_tabs)
+        tab_h.addWidget(self.btn_add_sheet)
+        tab_h.addStretch()
+        layout.addWidget(tab_row)
+
+        # Khởi tạo workbook với một sheet (model đã tạo ở __init__).
+        self.sheets: list[_Sheet] = [_Sheet(self.model, "Sheet1", self._filters)]
+        self._active = 0
+        self.sheet_tabs.blockSignals(True)
+        self.sheet_tabs.addTab("Sheet1")
+        self.sheet_tabs.blockSignals(False)
 
         self.setCentralWidget(central)
 
@@ -790,6 +830,125 @@ class MainWindow(QMainWindow):
             self.freeze.cols = cols
         self.freeze.set_freeze(self.freeze.rows, self.freeze.cols)
 
+    # ------------------------------------------------------------ sheet (workbook)
+    def _wire_selection(self) -> None:
+        """Nối tín hiệu selection model hiện tại (gọi lại sau mỗi setModel)."""
+        sm = self.view.selectionModel()
+        sm.currentChanged.connect(self._on_current_changed)
+        sm.selectionChanged.connect(self._update_stats)
+
+    def _activate_sheet(self, i: int) -> None:
+        if not (0 <= i < len(self.sheets)):
+            return
+        # Lưu trạng thái freeze của sheet đang hoạt động trước khi chuyển.
+        if 0 <= self._active < len(self.sheets):
+            cur = self.sheets[self._active]
+            cur.freeze_rows = self.freeze.rows
+            cur.freeze_cols = self.freeze.cols
+        self._active = i
+        sheet = self.sheets[i]
+        self.model = sheet.model
+        self._filters = sheet.filters
+        self.view.setModel(self.model)
+        self._wire_selection()
+        self.freeze.rebind()
+        self.freeze.set_freeze(sheet.freeze_rows, sheet.freeze_cols)
+        self.view.refresh_spans()
+        self._apply_filters()
+        self.view.horizontalHeader().refresh(set(self._filters.keys()))
+        self.view.setCurrentIndex(self.model.index(0, 0))
+
+    def _unique_sheet_name(self) -> str:
+        existing = {s.name for s in self.sheets}
+        n = len(self.sheets) + 1
+        while f"Sheet{n}" in existing:
+            n += 1
+        return f"Sheet{n}"
+
+    def add_sheet(self) -> None:
+        model = SpreadsheetModel()
+        model.mergesChanged.connect(self.view.refresh_spans)
+        name = self._unique_sheet_name()
+        self.sheets.append(_Sheet(model, name))
+        idx = len(self.sheets) - 1
+        self.sheet_tabs.blockSignals(True)
+        self.sheet_tabs.addTab(name)
+        self.sheet_tabs.blockSignals(False)
+        self.sheet_tabs.setCurrentIndex(idx)  # phát currentChanged -> _activate_sheet
+
+    def _delete_sheet(self, i: int) -> None:
+        if len(self.sheets) <= 1:
+            QMessageBox.information(self, APP_NAME, tr("sheet_min"))
+            return
+        self.sheets.pop(i)
+        new_i = min(i, len(self.sheets) - 1)
+        self.sheet_tabs.blockSignals(True)
+        self.sheet_tabs.removeTab(i)
+        self.sheet_tabs.setCurrentIndex(new_i)
+        self.sheet_tabs.blockSignals(False)
+        self._active = -1
+        self._activate_sheet(new_i)
+
+    def _rename_sheet(self, i: int) -> None:
+        if not (0 <= i < len(self.sheets)):
+            return
+        name, ok = QInputDialog.getText(
+            self, tr("sheet_rename"), tr("sheet_name"), text=self.sheets[i].name
+        )
+        name = name.strip()
+        if not ok or not name or name == self.sheets[i].name:
+            return
+        if any(s.name == name for s in self.sheets):
+            QMessageBox.information(self, APP_NAME, tr("sheet_dup"))
+            return
+        self.sheets[i].name = name
+        self.sheet_tabs.setTabText(i, name)
+
+    def _duplicate_sheet(self, i: int) -> None:
+        src = self.sheets[i]
+        model = SpreadsheetModel()
+        model.replace_all_with_fmt(
+            src.model.raw_grid(), src.model.all_formats(), src.model.merges()
+        )
+        model.mergesChanged.connect(self.view.refresh_spans)
+        name = self._unique_sheet_name()
+        self.sheets.insert(i + 1, _Sheet(model, name))
+        self.sheet_tabs.blockSignals(True)
+        self.sheet_tabs.insertTab(i + 1, name)
+        self.sheet_tabs.blockSignals(False)
+        self.sheet_tabs.setCurrentIndex(i + 1)
+
+    def _on_tab_moved(self, frm: int, to: int) -> None:
+        self.sheets.insert(to, self.sheets.pop(frm))
+        self._active = self.sheet_tabs.currentIndex()
+
+    def _sheet_context_menu(self, pos) -> None:
+        i = self.sheet_tabs.tabAt(pos)
+        if i < 0:
+            return
+        menu = QMenu(self)
+        menu.addAction(tr("sheet_rename"), lambda: self._rename_sheet(i))
+        menu.addAction(tr("sheet_duplicate"), lambda: self._duplicate_sheet(i))
+        menu.addAction(tr("sheet_delete"), lambda: self._delete_sheet(i))
+        menu.exec(self.sheet_tabs.mapToGlobal(pos))
+
+    def _load_sheets(self, sheets_data: list) -> None:
+        """Dựng lại toàn bộ workbook từ danh sách (name, rows, fmt, merges)."""
+        self.sheet_tabs.blockSignals(True)
+        while self.sheet_tabs.count():
+            self.sheet_tabs.removeTab(0)
+        self.sheets = []
+        for name, rows, fmt, merges in sheets_data:
+            model = SpreadsheetModel()
+            model.replace_all_with_fmt(rows, fmt, merges)
+            model.mergesChanged.connect(self.view.refresh_spans)
+            self.sheets.append(_Sheet(model, name))
+            self.sheet_tabs.addTab(name)
+        self.sheet_tabs.setCurrentIndex(0)
+        self.sheet_tabs.blockSignals(False)
+        self._active = -1
+        self._activate_sheet(0)
+
     # ------------------------------------------------------------ ngôn ngữ
     def set_language(self, lang: str) -> None:
         if lang == current_lang():
@@ -949,7 +1108,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ thao tác tệp
     def new_file(self) -> None:
-        self.model.replace_all([[""] * 26 for _ in range(50)])
+        self._load_sheets([("Sheet1", [[""] * 26 for _ in range(50)], {}, [])])
         self.current_path = None
         self._update_title()
 
@@ -973,8 +1132,7 @@ class MainWindow(QMainWindow):
             worker.wait()
             if cancelled[0]:
                 return
-            rows, fmt, merges = result
-            self.model.replace_all_with_fmt(rows, fmt, merges)
+            self._load_sheets(result)
             self.current_path = Path(path)
             self._update_title()
             self.statusBar().showMessage(tr("opened", path=path), 5000)
@@ -1006,16 +1164,17 @@ class MainWindow(QMainWindow):
         self._save_to(Path(path))
 
     def _save_to(self, path: Path) -> None:
-        # Snapshot grid + định dạng trên main thread trước — worker chỉ ghi file.
-        rows = self.model.raw_grid()
-        fmt = self.model.all_formats()
-        merges = self.model.merges()
+        # Snapshot mọi sheet trên main thread trước — worker chỉ ghi file.
+        sheets = [
+            (s.name, s.model.raw_grid(), s.model.all_formats(), s.model.merges())
+            for s in self.sheets
+        ]
 
         dlg = QProgressDialog(tr("saving_file"), tr("cancel"), 0, 0, self)
         dlg.setWindowModality(Qt.WindowModal)
         dlg.setMinimumDuration(400)
 
-        worker = _IoWorker(lambda: io_utils.save_file(path, rows, fmt, merges), self)
+        worker = _IoWorker(lambda: io_utils.save_file(path, sheets), self)
         cancelled = [False]
 
         def on_cancel():

@@ -119,13 +119,11 @@ def _build_style(fmt: dict) -> dict:
     return style
 
 
-def save_xlsx(path: str | Path, rows: list[list[str]],
-              fmt: dict | None = None, merges: list | None = None) -> None:
+def _write_ws(ws, rows: list[list[str]], fmt: dict, merges: list) -> None:
+    """Ghi dữ liệu + định dạng + ô gộp vào một worksheet."""
     from .formula import is_formula
 
     fmt = fmt or {}
-    wb = openpyxl.Workbook()
-    ws = wb.active
     for r, row in enumerate(rows, start=1):
         for c, value in enumerate(row, start=1):
             cell_fmt = fmt.get((r - 1, c - 1))
@@ -139,15 +137,32 @@ def save_xlsx(path: str | Path, rows: list[list[str]],
                     num = _try_number(value)
                     cell.value = num if num is not None else value
             if cell_fmt:
-                style = _build_style(cell_fmt)
-                for attr, obj in style.items():
+                for attr, obj in _build_style(cell_fmt).items():
                     setattr(cell, attr, obj)
 
     for (t, l, b, r) in (merges or []):
         ws.merge_cells(
             start_row=t + 1, start_column=l + 1, end_row=b + 1, end_column=r + 1
         )
+
+
+def save_xlsx(path: str | Path, sheets: list) -> None:
+    """sheets: danh sách (name, rows, fmt, merges)."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # bỏ sheet mặc định, tự tạo theo danh sách
+    for name, rows, fmt, merges in sheets:
+        ws = wb.create_sheet(title=_safe_sheet_name(name))
+        _write_ws(ws, rows, fmt, merges)
+    if not wb.sheetnames:  # phòng trường hợp rỗng
+        wb.create_sheet(title="Sheet1")
     wb.save(path)
+
+
+def _safe_sheet_name(name: str) -> str:
+    """Tên sheet hợp lệ cho Excel (<=31 ký tự, bỏ ký tự cấm)."""
+    for ch in r'[]:*?/\\':
+        name = name.replace(ch, " ")
+    return (name.strip() or "Sheet")[:31]
 
 
 def _try_number(text: str):
@@ -214,12 +229,8 @@ def _read_fmt(cell) -> dict:
     return f
 
 
-def load_xlsx(path: str | Path) -> tuple[list[list[str]], dict, list]:
-    # data_only=False để giữ nguyên công thức (=...) — app tự tính lại.
-    # Không dùng read_only để đọc được đầy đủ style + merge.
-    wb = openpyxl.load_workbook(path, data_only=False)
-    ws = wb.active
-
+def _read_ws(ws) -> tuple[list[list[str]], dict, list]:
+    """Đọc một worksheet -> (rows, fmt, merges)."""
     max_row = ws.max_row or 1
     max_col = ws.max_column or 1
     rows: list[list[str]] = []
@@ -235,35 +246,52 @@ def load_xlsx(path: str | Path) -> tuple[list[list[str]], dict, list]:
                 fmt[(r - 1, c - 1)] = cell_fmt
         rows.append(row_vals)
 
-    merges = []
-    for rng in ws.merged_cells.ranges:
-        merges.append(
-            (rng.min_row - 1, rng.min_col - 1, rng.max_row - 1, rng.max_col - 1)
-        )
-
-    wb.close()
+    merges = [
+        (rng.min_row - 1, rng.min_col - 1, rng.max_row - 1, rng.max_col - 1)
+        for rng in ws.merged_cells.ranges
+    ]
     return _normalize(rows), fmt, merges
+
+
+def load_xlsx(path: str | Path) -> list:
+    """Đọc mọi sheet -> danh sách (name, rows, fmt, merges)."""
+    # data_only=False để giữ nguyên công thức (=...) — app tự tính lại.
+    # Không dùng read_only để đọc được đầy đủ style + merge.
+    wb = openpyxl.load_workbook(path, data_only=False)
+    sheets = []
+    for ws in wb.worksheets:
+        rows, fmt, merges = _read_ws(ws)
+        sheets.append((ws.title, rows, fmt, merges))
+    wb.close()
+    return sheets or [("Sheet1", _normalize([[""]]), {}, [])]
 
 
 # ---------------------------------------------------------------- điều phối
 
 
-def load_file(path: str | Path) -> tuple[list[list[str]], dict, list]:
-    """Tự nhận định dạng theo phần mở rộng. Trả (rows, fmt, merges)."""
+def load_file(path: str | Path) -> list:
+    """Tự nhận định dạng theo phần mở rộng.
+
+    Trả về danh sách sheet ``[(name, rows, fmt, merges), ...]``.
+    CSV chỉ có một sheet (tên theo file).
+    """
     suffix = Path(path).suffix.lower()
     if suffix in (".xlsx", ".xlsm"):
         return load_xlsx(path)
     if suffix in (".csv", ".txt", ".tsv"):
-        return load_csv(path), {}, []
+        return [(Path(path).stem or "Sheet1", load_csv(path), {}, [])]
     raise ValueError(f"Định dạng không hỗ trợ: {suffix}")
 
 
-def save_file(path: str | Path, rows: list[list[str]],
-              fmt: dict | None = None, merges: list | None = None) -> None:
+def save_file(path: str | Path, sheets: list) -> None:
+    """sheets: danh sách (name, rows, fmt, merges).
+
+    XLSX lưu mọi sheet kèm định dạng; CSV chỉ lưu giá trị của sheet đầu tiên.
+    """
     suffix = Path(path).suffix.lower()
     if suffix in (".xlsx", ".xlsm"):
-        save_xlsx(path, rows, fmt, merges)
+        save_xlsx(path, sheets)
     elif suffix in (".csv", ".txt", ".tsv"):
-        save_csv(path, rows)  # CSV không lưu định dạng
+        save_csv(path, sheets[0][1] if sheets else [[""]])  # CSV: chỉ sheet đầu
     else:
         raise ValueError(f"Định dạng không hỗ trợ: {suffix}")
