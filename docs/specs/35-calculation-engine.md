@@ -158,7 +158,7 @@ Excel 365: Dynamic Arrays — không cần CSE; mảng spill tự động ([Spec
 3. `=A1` ở B1; `=B1` ở A1 → popup "Circular reference: A1, B1". Status Bar hiện "Circular".
 4. Enable iterative + circular setup → max 100 iterations, converge nếu max change < 0.001.
 5. R1C1 toggle bật → Formula Bar hiện `=R[-1]C` thay vì `=A1` (cho công thức trong A2).
-6. `=DATE(2026,6,2)` → serial 46155 (date format hiển thị 02/06/2026).
+6. `=DATE(2026,6,2)` → serial 46175 (date format hiển thị 02/06/2026; epoch Excel 1899-12-30).
 7. `=NOW()` ô A1; gõ vào A5 → A1 cập nhật (volatile).
 8. File lớn 100k cells với 1 cell volatile → recalc < 200ms (graph propagation chỉ touch dependents).
 

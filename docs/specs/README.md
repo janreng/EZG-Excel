@@ -11,7 +11,7 @@
 3. Implement xong → verify từng acceptance criterion trong spec.
 4. Phát hiện hành vi Excel thật khác spec → cập nhật spec, **không** sửa code chệch.
 
-## Danh sách specs (40 files)
+## Danh sách specs (51 files)
 
 ### Core UX (1-11) — Nền tảng
 | # | Title | Phase | File |

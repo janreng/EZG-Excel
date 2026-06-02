@@ -26,7 +26,7 @@
 | Row/Col/Sheet operations | resize/insert/delete/hide có; group/outline chưa | ✓ | [09](09-row-col-operations.md) |
 | Sheet tabs (multi sheet) | **chưa** | ✓ | [10](10-sheet-tabs.md) |
 | Status Bar | có Sum/Avg/Count cơ bản, thiếu Cell Mode, View buttons | ✓ | [11](11-status-bar.md) |
-| Formula engine | ~60 hàm, không có Function Wizard / Error smart tag / Trace | ✓ | [12](12-formula-system.md) |
+| Formula engine | ~120 hàm (v0.12.0), chưa có Function Wizard / Error smart tag / Trace | ✓ | [12](12-formula-system.md) |
 | Clipboard / Paste Special | Ctrl+C/X/V có, Paste Special chỉ "values" partial | ✓ | [13](13-clipboard-paste-special.md) |
 | Freeze / Split / Views | Freeze có; Split/Page Layout/Page Break chưa | ✓ | [14](14-freeze-split-views.md) |
 | Filter / Sort | có | ✓ | [15](15-filter-sort.md) |
@@ -38,6 +38,11 @@
 | VBA / Macro | chưa | ✓ | [21](21-vba-macro.md) |
 | Modern (Checkbox / Regex / Python / Copilot / Focus Cell) | chưa | ✓ | [22](22-modern-features.md) |
 | Keyboard shortcuts | một phần | ✓ | [23](23-keyboard-shortcuts.md) |
+
+> Bảng trạng thái trên mới liệt kê spec 01–23. Repo có **51 spec** (24–51:
+> print, validation, comments, data-tools, what-if, protection, themes, named
+> ranges, sparklines, file-formats, copilot, ... đến start-screen) — xem
+> `README.md` và các Phase 6–7 bên dưới. Rà soát chất lượng: `../SPEC_AUDIT.md`.
 
 ## Phase roadmap
 
@@ -70,11 +75,6 @@ Refactor kiến trúc + thêm 2 container.
 - [12 Formula System (UX)](12-formula-system.md) — Function Wizard (Shift+F3), autocomplete dropdown, ScreenTip, error smart tag, Trace Precedents/Dependents, Evaluate Formula
 - [17 Conditional Formatting](17-conditional-formatting.md) — 5 loại preset + custom formula rule + Manage Rules + Stop If True priority
 - [05 AutoFill / AutoComplete / Flash Fill](05-data-entry-autofill.md) — AutoComplete cột text, Flash Fill Ctrl+E, Pick From Dropdown List
-
-### Phase 5 — Filter / Sort nâng cao + Modern features (2 tuần)
-
-- [15 Filter / Sort](15-filter-sort.md) — multi-level sort dialog, Text/Number/Date filter sub-menu, Sort by Color
-- [22 Modern features](22-modern-features.md) — Checkbox in cell, REGEX functions, Focus Cell, TRIMRANGE, Navigation highlighting
 
 ### Phase 5 — Filter / Sort nâng cao + Modern features + Data Tools (2-3 tuần)
 
