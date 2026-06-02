@@ -400,13 +400,19 @@ class SpreadsheetView(QTableView):
         return r, c
 
     def _update_header_highlight(self) -> None:
-        """Cập nhật set cột/hàng được chọn để header highlight như Excel."""
-        idxs = self.selectionModel().selectedIndexes() if self.selectionModel() else []
-        cols = {i.column() for i in idxs}
-        rows = {i.row() for i in idxs}
-        # Thêm ô current nếu không có selection rộng
-        cur = self.currentIndex() if self.selectionModel() else None
-        if cur and cur.isValid():
+        """Cập nhật set cột/hàng được chọn để header highlight như Excel.
+
+        Duyệt theo *range* (O số vùng) thay vì selectedIndexes() liệt kê từng ô.
+        """
+        sm = self.selectionModel()
+        cols: set[int] = set()
+        rows: set[int] = set()
+        if sm is not None:
+            for rng in sm.selection():  # theo range, không liệt kê từng ô
+                cols.update(range(rng.left(), rng.right() + 1))
+                rows.update(range(rng.top(), rng.bottom() + 1))
+        cur = self.currentIndex() if sm is not None else None
+        if cur is not None and cur.isValid():
             cols.add(cur.column())
             rows.add(cur.row())
         self._h_header.set_selected_cols(cols)
@@ -415,10 +421,13 @@ class SpreadsheetView(QTableView):
     def setSelectionModel(self, model):
         super().setSelectionModel(model)
         if model is not None:
-            model.selectionChanged.connect(lambda *a: self.viewport().update())
-            model.selectionChanged.connect(lambda *a: self._update_header_highlight())
-            model.currentChanged.connect(lambda *a: self.viewport().update())
-            model.currentChanged.connect(lambda *a: self._update_header_highlight())
+            model.selectionChanged.connect(self._on_selection_state_changed)
+            model.currentChanged.connect(self._on_selection_state_changed)
+
+    def _on_selection_state_changed(self, *args) -> None:
+        """Làm mới header highlight + vẽ lại overlay vùng chọn (một chỗ)."""
+        self._update_header_highlight()
+        self.viewport().update()
 
     def eventFilter(self, obj, event):
         if obj is getattr(self, "_corner_btn", None) and event.type() == QEvent.MouseButtonDblClick:
