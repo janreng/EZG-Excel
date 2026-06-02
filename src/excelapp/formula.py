@@ -3,7 +3,7 @@
 Hỗ trợ:
   - Số, chuỗi ("..."), toán tử + - * / ^ và ngoặc ().
   - Tham chiếu ô kiểu A1 và vùng A1:B3 (vùng 2 chiều cho VLOOKUP/INDEX...).
-  - ~60 hàm: gộp (SUM, AVERAGE, MIN, MAX, COUNT...), logic (IF, AND, OR,
+  - ~120 hàm: gộp (SUM, AVERAGE, MIN, MAX, COUNT...), logic (IF, AND, OR,
     NOT, IFERROR, IFS), điều kiện (COUNTIF, SUMIF, COUNTIFS, SUMIFS...),
     tra cứu (VLOOKUP, HLOOKUP, INDEX, MATCH, LOOKUP), chuỗi (LEFT, RIGHT,
     MID, LEN, TRIM, UPPER, LOWER, SUBSTITUTE...), toán (CEILING, FLOOR,
@@ -16,6 +16,7 @@ Công thức là chuỗi bắt đầu bằng dấu '='. Việc lấy giá trị 
 
 from __future__ import annotations
 
+import calendar
 import datetime
 import fnmatch
 import math
@@ -28,7 +29,25 @@ from typing import Callable
 
 
 class FormulaError(Exception):
-    """Lỗi khi phân tích hoặc tính công thức."""
+    """Lỗi khi phân tích hoặc tính công thức.
+
+    ``etype`` mang mã lỗi kiểu Excel (#DIV/0!, #N/A, #VALUE!, #NUM!, #NAME?,
+    #REF!) để hiển thị giống Excel và để các hàm IS* (ISERROR/ISNA/ISERR)
+    phân loại đúng. Mặc định #VALUE! (lỗi kiểu/giá trị — phổ biến nhất).
+    """
+
+    def __init__(self, message: str = "", etype: str = "#VALUE!"):
+        super().__init__(message)
+        self.etype = etype
+
+
+# Mã lỗi chuẩn Excel (dùng cho etype + nhận diện trong hàm IS*).
+ERR_DIV0 = "#DIV/0!"
+ERR_NA = "#N/A"
+ERR_VALUE = "#VALUE!"
+ERR_NUM = "#NUM!"
+ERR_NAME = "#NAME?"
+ERR_REF = "#REF!"
 
 
 # ---------------------------------------------------------------- tiện ích ô
@@ -73,7 +92,7 @@ _TOKEN_RE = re.compile(
     r"""
       (?P<NUMBER>\d+\.\d+|\d+|\.\d+)
     | (?P<STRING>"(?:[^"\\]|\\.)*")
-    | (?P<CELL>\$?[A-Za-z]+\$?\d+)
+    | (?P<CELL>\$?[A-Za-z]+\$?\d+(?![A-Za-z0-9_])(?!\s*\())
     | (?P<IDENT>[A-Za-z_][A-Za-z0-9_]*)
     | (?P<OP>>=|<=|<>|[+\-*/^(),:<>=])
     | (?P<WS>\s+)
@@ -159,13 +178,28 @@ def _to_number(value) -> float:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, (int, float)):
-        return float(value)
+        try:
+            n = float(value)
+        except OverflowError:
+            raise FormulaError("Số quá lớn", ERR_NUM)
+        if not math.isfinite(n):
+            raise FormulaError(f"Số không hữu hạn: {value!r}", ERR_NUM)
+        return n
     if value is None or value == "":
         return 0.0
     try:
-        return float(value)
+        n = float(value)
     except (TypeError, ValueError):
         raise FormulaError(f"Không phải số: {value!r}")
+    # Excel coi "inf"/"nan" là #VALUE!, không phải số hợp lệ.
+    if not math.isfinite(n):
+        raise FormulaError(f"Không phải số: {value!r}")
+    return n
+
+
+def _to_int(value) -> int:
+    """Đổi sang int an toàn (chặn inf/NaN trước khi int() ném lỗi)."""
+    return int(_to_number(value))
 
 
 def _text(value) -> str:
@@ -213,15 +247,55 @@ def _loose_equal(a, b) -> bool:
         return _text(a).lower() == _text(b).lower()
 
 
-def _match_criteria(value, criteria) -> bool:
-    """So khớp giá trị với tiêu chí kiểu Excel: số, ">5", "<=3", "<>x", "ab*"."""
+def _wildcard_to_regex(pat: str):
+    """Chuyển wildcard kiểu Excel (* ? và ~ để escape) sang regex đã biên dịch.
+
+    Khác fnmatch: KHÔNG diễn giải '[...]' thành character-class (Excel không có),
+    và hỗ trợ ~* ~? ~~ thành ký tự literal. So khớp không phân biệt hoa/thường.
+    """
+    out = []
+    i = 0
+    n = len(pat)
+    while i < n:
+        ch = pat[i]
+        if ch == "~" and i + 1 < n and pat[i + 1] in "*?~":
+            out.append(re.escape(pat[i + 1]))
+            i += 2
+            continue
+        if ch == "*":
+            out.append(".*")
+        elif ch == "?":
+            out.append(".")
+        else:
+            out.append(re.escape(ch))
+        i += 1
+    return re.compile("^" + "".join(out) + "$", re.DOTALL | re.IGNORECASE)
+
+
+def _compile_criteria(criteria) -> Callable[[object], bool]:
+    """Phân tích tiêu chí kiểu Excel MỘT LẦN, trả về predicate(value)->bool.
+
+    Hot path của COUNTIF/SUMIF/AVERAGEIF/COUNTIFS/SUMIFS/AVERAGEIFS/MAXIFS/MINIFS:
+    parse tiêu chí một lần ở ngoài vòng lặp, mỗi ô chỉ gọi predicate (không cấp
+    phát dict, không parse lại chuỗi, không try/except float lặp lại).
+    """
     if isinstance(criteria, bool):
-        return _to_bool(value) == criteria
+        def pred_bool(v):
+            try:
+                return _to_bool(v) == criteria
+            except FormulaError:
+                return False
+        return pred_bool
     if isinstance(criteria, (int, float)):
-        try:
-            return _to_number(value) == float(criteria)
-        except FormulaError:
-            return False
+        target = float(criteria)
+
+        def pred_num(v):
+            try:
+                return _to_number(v) == target
+            except FormulaError:
+                return False
+        return pred_num
+
     crit = str(criteria)
     op = None
     for o in (">=", "<=", "<>", ">", "<", "="):
@@ -230,25 +304,57 @@ def _match_criteria(value, criteria) -> bool:
             break
     try:
         crit_num = float(crit)
+        if not math.isfinite(crit_num):
+            crit_num = None
     except ValueError:
         crit_num = None
+
     if op in (">", "<", ">=", "<="):
         if crit_num is None:
-            return False
-        try:
-            v = _to_number(value)
-        except FormulaError:
-            return False
-        return {">": v > crit_num, "<": v < crit_num,
-                ">=": v >= crit_num, "<=": v <= crit_num}[op]
+            return lambda v: False
+        if op == ">":
+            comparator = lambda x: x > crit_num   # noqa: E731
+        elif op == "<":
+            comparator = lambda x: x < crit_num   # noqa: E731
+        elif op == ">=":
+            comparator = lambda x: x >= crit_num  # noqa: E731
+        else:
+            comparator = lambda x: x <= crit_num  # noqa: E731
+
+        def pred_cmp(v):
+            try:
+                return comparator(_to_number(v))
+            except FormulaError:
+                return False
+        return pred_cmp
+
+    negate = op == "<>"
     if crit_num is not None:
-        try:
-            eq = _to_number(value) == crit_num
-        except FormulaError:
-            eq = False
-    else:
-        eq = fnmatch.fnmatch(_text(value).lower(), crit.lower())
-    return (not eq) if op == "<>" else eq
+        def pred_eq(v):
+            try:
+                eq = _to_number(v) == crit_num
+            except FormulaError:
+                eq = False
+            return (not eq) if negate else eq
+        return pred_eq
+
+    rx = _wildcard_to_regex(crit) if any(c in crit for c in "*?~") else None
+    crit_low = crit.lower()
+
+    def pred_text(v):
+        s = _text(v)
+        eq = (rx.match(s) is not None) if rx is not None else (s.lower() == crit_low)
+        return (not eq) if negate else eq
+    return pred_text
+
+
+def _match_criteria(value, criteria) -> bool:
+    """So khớp 1 giá trị với 1 tiêu chí (tiện ích; biên dịch lại mỗi lần gọi).
+
+    Đường nóng nên dùng ``_compile_criteria`` ngoài vòng lặp; hàm này giữ lại cho
+    các chỗ gọi lẻ và để tương thích ngược.
+    """
+    return _compile_criteria(criteria)(value)
 
 
 def _numbers(args) -> list[float]:
@@ -311,7 +417,7 @@ def _fn_sqrt(args):
         raise FormulaError("SQRT cần đúng 1 đối số")
     n = _to_number(args[0])
     if n < 0:
-        raise FormulaError("SQRT của số âm")
+        raise FormulaError("SQRT của số âm", ERR_NUM)
     return n ** 0.5
 
 
@@ -328,14 +434,22 @@ def _fn_mod(args):
         raise FormulaError("MOD cần đúng 2 đối số")
     b = _to_number(args[1])
     if b == 0:
-        raise FormulaError("MOD chia cho 0")
+        raise FormulaError("MOD chia cho 0", ERR_DIV0)
     return _to_number(args[0]) % b
 
 
 def _fn_power(args):
     if len(args) != 2:
         raise FormulaError("POWER cần đúng 2 đối số")
-    return _to_number(args[0]) ** _to_number(args[1])
+    try:
+        result = _to_number(args[0]) ** _to_number(args[1])
+    except OverflowError:
+        raise FormulaError("POWER: kết quả quá lớn", ERR_NUM)
+    except ZeroDivisionError:
+        raise FormulaError("POWER: 0 mũ âm", ERR_DIV0)
+    if isinstance(result, complex) or not math.isfinite(result):
+        raise FormulaError("POWER: kết quả không hợp lệ", ERR_NUM)
+    return result
 
 
 def _fn_concat(args):
@@ -403,7 +517,8 @@ def _crit_values(arg) -> list:
 def _fn_countif(args):
     if len(args) != 2:
         raise FormulaError("COUNTIF cần đúng 2 đối số")
-    return float(sum(1 for v in _crit_values(args[0]) if _match_criteria(v, args[1])))
+    pred = _compile_criteria(args[1])
+    return float(sum(1 for v in _crit_values(args[0]) if pred(v)))
 
 
 def _fn_sumif(args):
@@ -411,9 +526,10 @@ def _fn_sumif(args):
         raise FormulaError("SUMIF cần 2 hoặc 3 đối số")
     crit_vals = _crit_values(args[0])
     sum_vals = _crit_values(args[2]) if len(args) == 3 else crit_vals
+    pred = _compile_criteria(args[1])
     total = 0.0
     for cv, sv in zip(crit_vals, sum_vals):
-        if _match_criteria(cv, args[1]):
+        if pred(cv):
             try:
                 total += _to_number(sv)
             except FormulaError:
@@ -426,27 +542,35 @@ def _fn_averageif(args):
         raise FormulaError("AVERAGEIF cần 2 hoặc 3 đối số")
     crit_vals = _crit_values(args[0])
     avg_vals = _crit_values(args[2]) if len(args) == 3 else crit_vals
+    pred = _compile_criteria(args[1])
     picked = []
     for cv, av in zip(crit_vals, avg_vals):
-        if _match_criteria(cv, args[1]):
+        if pred(cv):
             try:
                 picked.append(_to_number(av))
             except FormulaError:
                 pass
     if not picked:
-        raise FormulaError("AVERAGEIF: không có ô khớp")
+        raise FormulaError("AVERAGEIF: không có ô khớp", ERR_DIV0)
     return sum(picked) / len(picked)
+
+
+def _check_equal_lengths(ranges, fname):
+    """Tất cả vùng phải cùng độ dài, nếu không Excel trả #VALUE! (tránh IndexError)."""
+    if len({len(r) for r in ranges}) > 1:
+        raise FormulaError(f"{fname}: các vùng lệch kích thước", ERR_VALUE)
 
 
 def _fn_countifs(args):
     if len(args) < 2 or len(args) % 2 != 0:
         raise FormulaError("COUNTIFS cần các cặp (vùng, tiêu_chí)")
     ranges = [_crit_values(args[i]) for i in range(0, len(args), 2)]
-    crits = [args[i + 1] for i in range(0, len(args), 2)]
-    n = len(ranges[0])
+    _check_equal_lengths(ranges, "COUNTIFS")
+    preds = [_compile_criteria(args[i + 1]) for i in range(0, len(args), 2)]
+    rows = zip(*ranges)
     return float(sum(
-        1 for i in range(n)
-        if all(_match_criteria(ranges[k][i], crits[k]) for k in range(len(crits)))
+        1 for row in rows
+        if all(preds[k](row[k]) for k in range(len(preds)))
     ))
 
 
@@ -455,12 +579,13 @@ def _fn_sumifs(args):
         raise FormulaError("SUMIFS cần vùng_tổng + các cặp (vùng, tiêu_chí)")
     sum_vals = _crit_values(args[0])
     ranges = [_crit_values(args[i]) for i in range(1, len(args), 2)]
-    crits = [args[i + 1] for i in range(1, len(args), 2)]
+    _check_equal_lengths([sum_vals] + ranges, "SUMIFS")
+    preds = [_compile_criteria(args[i + 1]) for i in range(1, len(args), 2)]
     total = 0.0
-    for i in range(len(sum_vals)):
-        if all(_match_criteria(ranges[k][i], crits[k]) for k in range(len(crits))):
+    for sv, row in zip(sum_vals, zip(*ranges)):
+        if all(preds[k](row[k]) for k in range(len(preds))):
             try:
-                total += _to_number(sum_vals[i])
+                total += _to_number(sv)
             except FormulaError:
                 pass
     return total
@@ -494,12 +619,12 @@ def _fn_vlookup(args):
             if _cmp(v, key) <= 0:
                 best = i
         if best is None:
-            raise FormulaError("VLOOKUP: không tìm thấy")
+            raise FormulaError("VLOOKUP: không tìm thấy", ERR_NA)
         return table.rows[best][col_idx - 1]
     for i, v in enumerate(first):
         if _loose_equal(v, key):
             return table.rows[i][col_idx - 1]
-    raise FormulaError("VLOOKUP: không tìm thấy")
+    raise FormulaError("VLOOKUP: không tìm thấy", ERR_NA)
 
 
 def _fn_hlookup(args):
@@ -519,12 +644,12 @@ def _fn_hlookup(args):
             if _cmp(v, key) <= 0:
                 best = i
         if best is None:
-            raise FormulaError("HLOOKUP: không tìm thấy")
+            raise FormulaError("HLOOKUP: không tìm thấy", ERR_NA)
         return table.rows[row_idx - 1][best]
     for i, v in enumerate(first):
         if _loose_equal(v, key):
             return table.rows[row_idx - 1][i]
-    raise FormulaError("HLOOKUP: không tìm thấy")
+    raise FormulaError("HLOOKUP: không tìm thấy", ERR_NA)
 
 
 def _fn_index(args):
@@ -541,7 +666,7 @@ def _fn_index(args):
     else:
         c = 1
     if not (1 <= r <= table.height and 1 <= c <= table.width):
-        raise FormulaError("INDEX: chỉ số vượt phạm vi")
+        raise FormulaError("INDEX: chỉ số vượt phạm vi", ERR_REF)
     return table.rows[r - 1][c - 1]
 
 
@@ -557,13 +682,13 @@ def _fn_match(args):
         for i, v in enumerate(vals):
             if _loose_equal(v, key):
                 return float(i + 1)
-        raise FormulaError("MATCH: không tìm thấy")
+        raise FormulaError("MATCH: không tìm thấy", ERR_NA)
     best = None
     for i, v in enumerate(vals):
         if (mtype == 1 and _cmp(v, key) <= 0) or (mtype != 1 and _cmp(v, key) >= 0):
             best = i
     if best is None:
-        raise FormulaError("MATCH: không tìm thấy")
+        raise FormulaError("MATCH: không tìm thấy", ERR_NA)
     return float(best + 1)
 
 
@@ -578,7 +703,7 @@ def _fn_lookup(args):
         if _cmp(v, key) <= 0:
             best = i
     if best is None or best >= len(rv):
-        raise FormulaError("LOOKUP: không tìm thấy")
+        raise FormulaError("LOOKUP: không tìm thấy", ERR_NA)
     return rv[best]
 
 
@@ -821,7 +946,10 @@ def _date_to_serial(d: datetime.date) -> float:
 
 
 def _serial_to_date(n: float) -> datetime.date:
-    return _EXCEL_EPOCH + datetime.timedelta(days=int(n))
+    try:
+        return _EXCEL_EPOCH + datetime.timedelta(days=int(n))
+    except (OverflowError, ValueError):
+        raise FormulaError("Ngày ngoài phạm vi", ERR_NUM)
 
 
 def _fn_today(args):
@@ -1022,6 +1150,639 @@ def _format_number(value: float, fmt: str) -> str:
     return out + "%" if percent else out
 
 
+# ============================================================ HÀM MỚI (v0.11.3)
+# Bổ sung loạt hàm Excel chuẩn còn thiếu. Tất cả đều "scalar" (không tạo spill
+# range), khớp mô hình đối số hiện có (giá trị đơn hoặc _Range). Giữ nguyên các
+# helper hiện có (_to_number, _text, _flatten, _numbers, _match_criteria...).
+
+
+def _round_half_up(x: float) -> float:
+    """Làm tròn nửa-ra-xa-0 (kiểu Excel), khác round() của Python (banker)."""
+    return math.floor(x + 0.5) if x >= 0 else math.ceil(x - 0.5)
+
+
+def _is_number(v) -> bool:
+    """True nếu là số thực (bool KHÔNG tính là số, giống Excel)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _scalar(v):
+    """Ép một đối số về giá trị đơn. Vùng 1 ô -> giá trị ô đó; vùng nhiều ô ->
+    #VALUE! (tránh sai âm thầm khi truyền A1:A9 vào hàm cần 1 giá trị)."""
+    if isinstance(v, _Range):
+        flat = v.flat()
+        if len(flat) == 1:
+            return flat[0]
+        raise FormulaError("Cần một giá trị đơn, nhận vùng nhiều ô", ERR_VALUE)
+    return v
+
+
+# --- thông tin (Information) ---
+
+
+def _fn_isnumber(args):
+    if len(args) != 1:
+        raise FormulaError("ISNUMBER cần đúng 1 đối số")
+    return _is_number(_scalar(args[0]))
+
+
+def _fn_istext(args):
+    if len(args) != 1:
+        raise FormulaError("ISTEXT cần đúng 1 đối số")
+    v = _scalar(args[0])
+    return isinstance(v, str) and v != ""
+
+
+def _fn_isnontext(args):
+    if len(args) != 1:
+        raise FormulaError("ISNONTEXT cần đúng 1 đối số")
+    v = _scalar(args[0])
+    return not (isinstance(v, str) and v != "")
+
+
+def _fn_isblank(args):
+    if len(args) != 1:
+        raise FormulaError("ISBLANK cần đúng 1 đối số")
+    v = _scalar(args[0])
+    return v is None or v == ""
+
+
+def _fn_islogical(args):
+    if len(args) != 1:
+        raise FormulaError("ISLOGICAL cần đúng 1 đối số")
+    return isinstance(_scalar(args[0]), bool)
+
+
+def _fn_iseven(args):
+    if len(args) != 1:
+        raise FormulaError("ISEVEN cần đúng 1 đối số")
+    return math.trunc(_to_number(_scalar(args[0]))) % 2 == 0
+
+
+def _fn_isodd(args):
+    if len(args) != 1:
+        raise FormulaError("ISODD cần đúng 1 đối số")
+    return math.trunc(_to_number(_scalar(args[0]))) % 2 != 0
+
+
+def _fn_na(args):
+    if args:
+        raise FormulaError("NA không nhận đối số", ERR_VALUE)
+    raise FormulaError("#N/A", ERR_NA)
+
+
+# --- logic bổ sung ---
+
+
+def _fn_xor(args):
+    vals = _flatten(args)
+    if not vals:
+        raise FormulaError("XOR cần ít nhất 1 đối số")
+    return sum(1 for v in vals if _to_bool(v)) % 2 == 1
+
+
+# --- chuỗi bổ sung ---
+
+
+def _fn_textjoin(args):
+    if len(args) < 3:
+        raise FormulaError("TEXTJOIN cần delimiter, ignore_empty và ít nhất 1 text")
+    if isinstance(args[0], _Range):
+        raise FormulaError("TEXTJOIN: delimiter phải là 1 giá trị", ERR_VALUE)
+    delim = _text(args[0])
+    ignore_empty = _to_bool(args[1])
+    parts = []
+    for v in _flatten(args[2:]):
+        if ignore_empty and (v is None or v == ""):
+            continue
+        parts.append(_text(v))
+    return delim.join(parts)
+
+
+def _fn_exact(args):
+    if len(args) != 2:
+        raise FormulaError("EXACT cần đúng 2 đối số")
+    return _text(args[0]) == _text(args[1])
+
+
+def _fn_char(args):
+    if len(args) != 1:
+        raise FormulaError("CHAR cần đúng 1 đối số")
+    n = int(_to_number(args[0]))
+    if not (1 <= n <= 255):
+        raise FormulaError("CHAR: mã phải trong 1..255", ERR_VALUE)
+    return chr(n)
+
+
+def _fn_unichar(args):
+    if len(args) != 1:
+        raise FormulaError("UNICHAR cần đúng 1 đối số")
+    n = int(_to_number(args[0]))
+    if not (1 <= n <= 0x10FFFF):
+        raise FormulaError("UNICHAR: mã ngoài phạm vi", ERR_VALUE)
+    return chr(n)
+
+
+def _fn_code(args):
+    if len(args) != 1:
+        raise FormulaError("CODE cần đúng 1 đối số")
+    s = _text(args[0])
+    if not s:
+        raise FormulaError("CODE: chuỗi rỗng", ERR_VALUE)
+    return float(ord(s[0]))
+
+
+def _fn_unicode(args):
+    if len(args) != 1:
+        raise FormulaError("UNICODE cần đúng 1 đối số")
+    s = _text(args[0])
+    if not s:
+        raise FormulaError("UNICODE: chuỗi rỗng", ERR_VALUE)
+    return float(ord(s[0]))
+
+
+def _fn_clean(args):
+    if len(args) != 1:
+        raise FormulaError("CLEAN cần đúng 1 đối số")
+    return "".join(ch for ch in _text(args[0]) if ord(ch) >= 32)
+
+
+def _fn_t(args):
+    if len(args) != 1:
+        raise FormulaError("T cần đúng 1 đối số")
+    v = args[0]
+    return v if isinstance(v, str) else ""
+
+
+def _fn_fixed(args):
+    if len(args) not in (1, 2, 3):
+        raise FormulaError("FIXED cần 1..3 đối số")
+    num = _to_number(args[0])
+    decimals = int(_to_number(args[1])) if len(args) >= 2 else 2
+    no_commas = _to_bool(args[2]) if len(args) == 3 else False
+    if decimals < 0:
+        factor = 10 ** (-decimals)
+        num = _round_half_up(num / factor) * factor
+        decimals = 0
+    spec = f"{'' if no_commas else ','}.{decimals}f"
+    return format(num, spec)
+
+
+# --- tra cứu bổ sung ---
+
+
+def _fn_choose(args):
+    if len(args) < 2:
+        raise FormulaError("CHOOSE cần index và ít nhất 1 giá trị")
+    idx = int(_to_number(args[0]))
+    if idx < 1 or idx > len(args) - 1:
+        raise FormulaError("CHOOSE: index vượt phạm vi", ERR_VALUE)
+    return args[idx]
+
+
+def _fn_xlookup(args):
+    if not (3 <= len(args) <= 6):
+        raise FormulaError("XLOOKUP cần 3..6 đối số")
+    key = args[0]
+    look_vals = _crit_values(args[1])
+    ret_vals = _crit_values(args[2])
+    if_nf = args[3] if len(args) >= 4 else None
+    match_mode = int(_to_number(args[4])) if len(args) >= 5 else 0
+    search_mode = int(_to_number(args[5])) if len(args) >= 6 else 1
+    n = len(look_vals)
+    order = range(n) if search_mode >= 0 else range(n - 1, -1, -1)
+    found = None
+    if match_mode == 0:
+        for i in order:
+            if _loose_equal(look_vals[i], key):
+                found = i
+                break
+    elif match_mode == 2:  # wildcard (kiểu Excel: * ? ~)
+        rx = _wildcard_to_regex(_text(key))
+        for i in order:
+            if rx.match(_text(look_vals[i])):
+                found = i
+                break
+    elif match_mode in (-1, 1):  # exact-or-next-smaller / -larger
+        want_smaller = match_mode == -1
+        best = None
+        for i in order:
+            c = _cmp(look_vals[i], key)
+            if c == 0:
+                found = i
+                break
+            if (want_smaller and c < 0) or (not want_smaller and c > 0):
+                if best is None or (
+                    _cmp(look_vals[i], look_vals[best]) > 0 if want_smaller
+                    else _cmp(look_vals[i], look_vals[best]) < 0
+                ):
+                    best = i
+        if found is None:
+            found = best
+    else:
+        raise FormulaError("XLOOKUP: match_mode không hỗ trợ", ERR_VALUE)
+    if found is None:
+        if if_nf is not None:
+            return if_nf
+        raise FormulaError("XLOOKUP: không tìm thấy", ERR_NA)
+    if found >= len(ret_vals):
+        raise FormulaError("XLOOKUP: vùng trả về không khớp kích thước", ERR_VALUE)
+    return ret_vals[found]
+
+
+# --- toán bổ sung ---
+
+
+def _math1(name: str, fn: Callable[[float], float]) -> Callable:
+    """Sinh hàm 1-đối-số gói lỗi miền xác định thành #NUM!."""
+    def impl(args):
+        if len(args) != 1:
+            raise FormulaError(f"{name} cần đúng 1 đối số")
+        try:
+            return fn(_to_number(args[0]))
+        except (ValueError, OverflowError):
+            raise FormulaError(f"{name}: ngoài miền xác định", ERR_NUM)
+    return impl
+
+
+def _fn_atan2(args):
+    if len(args) != 2:
+        raise FormulaError("ATAN2 cần đúng 2 đối số")
+    x = _to_number(args[0])
+    y = _to_number(args[1])
+    if x == 0 and y == 0:
+        raise FormulaError("ATAN2: cả hai bằng 0", ERR_DIV0)
+    return math.atan2(y, x)  # Excel: ATAN2(x_num, y_num)
+
+
+def _fn_degrees(args):
+    if len(args) != 1:
+        raise FormulaError("DEGREES cần đúng 1 đối số")
+    return math.degrees(_to_number(args[0]))
+
+
+def _fn_radians(args):
+    if len(args) != 1:
+        raise FormulaError("RADIANS cần đúng 1 đối số")
+    return math.radians(_to_number(args[0]))
+
+
+def _int_list(args) -> list[int]:
+    """Danh sách số nguyên (truncate) cho GCD/LCM. Excel: số âm -> #NUM!."""
+    out = []
+    for v in _flatten(args):
+        if v is None or v == "":
+            continue
+        n = math.trunc(_to_number(v))
+        if n < 0:
+            raise FormulaError("GCD/LCM: không nhận số âm", ERR_NUM)
+        out.append(n)
+    return out
+
+
+def _fn_gcd(args):
+    nums = _int_list(args)
+    if not nums:
+        raise FormulaError("GCD cần ít nhất 1 số")
+    result = 0
+    for n in nums:
+        result = math.gcd(result, n)
+    return float(result)
+
+
+def _fn_lcm(args):
+    nums = _int_list(args)
+    if not nums:
+        raise FormulaError("LCM cần ít nhất 1 số")
+    result = 1
+    for n in nums:
+        if n == 0:
+            return 0.0
+        result = result * n // math.gcd(result, n)
+    return float(result)
+
+
+# Ngưỡng log10 mà float64 còn biểu diễn được (~1.8e308). Dùng lgamma để CHẶN
+# kết quả quá lớn TRƯỚC khi tính (tránh vừa tràn float vừa treo CPU với n khổng lồ).
+_LN10 = math.log(10)
+_FLOAT_MAX_LOG10 = 308.0
+
+
+def _fn_fact(args):
+    if len(args) != 1:
+        raise FormulaError("FACT cần đúng 1 đối số")
+    n = math.trunc(_to_number(args[0]))
+    if n < 0:
+        raise FormulaError("FACT: số âm", ERR_NUM)
+    if n > 170:  # 171! đã tràn float64 (Excel cũng trả #NUM!)
+        raise FormulaError("FACT: kết quả quá lớn", ERR_NUM)
+    return float(math.factorial(n))
+
+
+def _fn_combin(args):
+    if len(args) != 2:
+        raise FormulaError("COMBIN cần đúng 2 đối số")
+    n = math.trunc(_to_number(args[0]))
+    k = math.trunc(_to_number(args[1]))
+    if n < 0 or k < 0 or k > n:
+        raise FormulaError("COMBIN: tham số không hợp lệ", ERR_NUM)
+    log10 = (math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)) / _LN10
+    if log10 > _FLOAT_MAX_LOG10:
+        raise FormulaError("COMBIN: kết quả quá lớn", ERR_NUM)
+    return float(math.comb(n, k))
+
+
+def _fn_permut(args):
+    if len(args) != 2:
+        raise FormulaError("PERMUT cần đúng 2 đối số")
+    n = math.trunc(_to_number(args[0]))
+    k = math.trunc(_to_number(args[1]))
+    if n < 0 or k < 0 or k > n:
+        raise FormulaError("PERMUT: tham số không hợp lệ", ERR_NUM)
+    log10 = (math.lgamma(n + 1) - math.lgamma(n - k + 1)) / _LN10
+    if log10 > _FLOAT_MAX_LOG10:
+        raise FormulaError("PERMUT: kết quả quá lớn", ERR_NUM)
+    return float(math.perm(n, k))
+
+
+def _fn_mround(args):
+    if len(args) != 2:
+        raise FormulaError("MROUND cần đúng 2 đối số")
+    num = _to_number(args[0])
+    mult = _to_number(args[1])
+    if mult == 0:
+        return 0.0
+    if num != 0 and (num > 0) != (mult > 0):
+        raise FormulaError("MROUND: num và multiple khác dấu", ERR_NUM)
+    return _round_half_up(num / mult) * mult
+
+
+def _fn_even(args):
+    if len(args) != 1:
+        raise FormulaError("EVEN cần đúng 1 đối số")
+    n = _to_number(args[0])
+    if n == 0:
+        return 0.0
+    k = math.ceil(abs(n) / 2) * 2
+    return float(k if n > 0 else -k)
+
+
+def _fn_odd(args):
+    if len(args) != 1:
+        raise FormulaError("ODD cần đúng 1 đối số")
+    n = _to_number(args[0])
+    if n == 0:
+        return 1.0
+    k = math.ceil((abs(n) + 1) / 2) * 2 - 1
+    return float(k if n > 0 else -k)
+
+
+def _fn_quotient(args):
+    if len(args) != 2:
+        raise FormulaError("QUOTIENT cần đúng 2 đối số")
+    b = _to_number(args[1])
+    if b == 0:
+        raise FormulaError("QUOTIENT chia cho 0", ERR_DIV0)
+    return float(math.trunc(_to_number(args[0]) / b))
+
+
+def _fn_sumsq(args):
+    return sum(n * n for n in _numbers(args))
+
+
+# --- thống kê bổ sung ---
+
+
+def _conditional_pick(args, fname: str) -> list[float]:
+    """Lấy list số từ vùng[0] khớp các cặp (vùng, tiêu_chí) sau đó (cho
+    AVERAGEIFS/MAXIFS/MINIFS)."""
+    if len(args) < 3 or len(args) % 2 == 0:
+        raise FormulaError(f"{fname} cần vùng_giá_trị + các cặp (vùng, tiêu_chí)")
+    target = _crit_values(args[0])
+    ranges = [_crit_values(args[i]) for i in range(1, len(args), 2)]
+    _check_equal_lengths([target] + ranges, fname)
+    preds = [_compile_criteria(args[i + 1]) for i in range(1, len(args), 2)]
+    picked = []
+    for tv, row in zip(target, zip(*ranges)):
+        if all(preds[k](row[k]) for k in range(len(preds))):
+            try:
+                picked.append(_to_number(tv))
+            except FormulaError:
+                pass
+    return picked
+
+
+def _fn_averageifs(args):
+    picked = _conditional_pick(args, "AVERAGEIFS")
+    if not picked:
+        raise FormulaError("AVERAGEIFS: không có ô khớp", ERR_DIV0)
+    return sum(picked) / len(picked)
+
+
+def _fn_maxifs(args):
+    picked = _conditional_pick(args, "MAXIFS")
+    return max(picked) if picked else 0.0
+
+
+def _fn_minifs(args):
+    picked = _conditional_pick(args, "MINIFS")
+    return min(picked) if picked else 0.0
+
+
+def _fn_stdevp(args):
+    nums = _numbers(args)
+    if not nums:
+        raise FormulaError("STDEVP cần ít nhất một số")
+    return statistics.pstdev(nums)
+
+
+def _fn_varp(args):
+    nums = _numbers(args)
+    if not nums:
+        raise FormulaError("VARP cần ít nhất một số")
+    return statistics.pvariance(nums)
+
+
+def _fn_geomean(args):
+    nums = _numbers(args)
+    if not nums or any(n <= 0 for n in nums):
+        raise FormulaError("GEOMEAN cần các số dương", ERR_NUM)
+    return statistics.geometric_mean(nums)
+
+
+def _fn_harmean(args):
+    nums = _numbers(args)
+    if not nums or any(n <= 0 for n in nums):
+        raise FormulaError("HARMEAN cần các số dương", ERR_NUM)
+    return statistics.harmonic_mean(nums)
+
+
+def _fn_averagea(args):
+    vals = []
+    for v in _flatten(args):
+        if v is None or v == "":
+            continue
+        if isinstance(v, bool):
+            vals.append(1.0 if v else 0.0)
+        elif _is_number(v):
+            vals.append(float(v))
+        else:
+            vals.append(0.0)  # text -> 0 (giống Excel)
+    if not vals:
+        raise FormulaError("AVERAGEA cần ít nhất một giá trị", ERR_DIV0)
+    return sum(vals) / len(vals)
+
+
+# --- ngày/giờ bổ sung ---
+
+
+def _add_months(d: datetime.date, months: int) -> datetime.date:
+    """Cộng số tháng vào ngày, kẹp về ngày cuối tháng nếu tràn."""
+    total = d.month - 1 + months
+    year = d.year + total // 12
+    month = total % 12 + 1
+    try:
+        last = calendar.monthrange(year, month)[1]
+        return datetime.date(year, month, min(d.day, last))
+    except (ValueError, OverflowError):
+        raise FormulaError("Ngày ngoài phạm vi (1..9999)", ERR_NUM)
+
+
+def _fn_edate(args):
+    if len(args) != 2:
+        raise FormulaError("EDATE cần đúng 2 đối số")
+    d = _serial_to_date(_to_number(args[0]))
+    return _date_to_serial(_add_months(d, int(_to_number(args[1]))))
+
+
+def _fn_eomonth(args):
+    if len(args) != 2:
+        raise FormulaError("EOMONTH cần đúng 2 đối số")
+    d = _add_months(_serial_to_date(_to_number(args[0])), int(_to_number(args[1])))
+    last = calendar.monthrange(d.year, d.month)[1]
+    return _date_to_serial(datetime.date(d.year, d.month, last))
+
+
+def _fn_time(args):
+    if len(args) != 3:
+        raise FormulaError("TIME cần đúng 3 đối số")
+    total = (_to_number(args[0]) * 3600
+             + _to_number(args[1]) * 60
+             + _to_number(args[2]))
+    return (total % 86400) / 86400.0
+
+
+def _fn_second(args):
+    if len(args) != 1:
+        raise FormulaError("SECOND cần đúng 1 đối số")
+    serial = _to_number(args[0])
+    return float(int(round((serial - math.floor(serial)) * 86400)) % 60)
+
+
+def _fn_days(args):
+    if len(args) != 2:
+        raise FormulaError("DAYS cần đúng 2 đối số")
+    return float(int(_to_number(args[0])) - int(_to_number(args[1])))
+
+
+def _fn_datevalue(args):
+    if len(args) != 1:
+        raise FormulaError("DATEVALUE cần đúng 1 đối số")
+    s = _text(args[0]).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return _date_to_serial(datetime.datetime.strptime(s, fmt).date())
+        except ValueError:
+            continue
+    raise FormulaError("DATEVALUE: không nhận dạng được ngày", ERR_VALUE)
+
+
+def _week_pos(d: datetime.date, sunday_start: bool) -> int:
+    """Vị trí (0..6) của ngày trong tuần. sunday_start=True: CN=0..T7=6."""
+    if sunday_start:
+        return d.isoweekday() % 7      # T2=1..T7=6, CN=0
+    return d.isoweekday() - 1          # T2=0..CN=6
+
+
+def _fn_weeknum(args):
+    if len(args) not in (1, 2):
+        raise FormulaError("WEEKNUM cần 1 hoặc 2 đối số")
+    d = _serial_to_date(_to_number(args[0]))
+    rtype = int(_to_number(args[1])) if len(args) == 2 else 1
+    if rtype == 21:
+        return float(d.isocalendar()[1])
+    if rtype not in (1, 2):
+        raise FormulaError("WEEKNUM: type chỉ hỗ trợ 1, 2, 21", ERR_NUM)
+    jan1 = datetime.date(d.year, 1, 1)
+    sunday_start = rtype == 1
+    offset = _week_pos(jan1, sunday_start)
+    return float(((d - jan1).days + offset) // 7 + 1)
+
+
+def _fn_isoweeknum(args):
+    if len(args) != 1:
+        raise FormulaError("ISOWEEKNUM cần đúng 1 đối số")
+    return float(_serial_to_date(_to_number(args[0])).isocalendar()[1])
+
+
+# --- logic LƯỜI bổ sung (đối số chỉ tính khi cần) ---
+
+
+def _fn_iserror_lazy(thunks):
+    if len(thunks) != 1:
+        raise FormulaError("ISERROR cần đúng 1 đối số")
+    try:
+        thunks[0]()
+        return False
+    except FormulaError:
+        return True
+
+
+def _fn_iserr_lazy(thunks):
+    if len(thunks) != 1:
+        raise FormulaError("ISERR cần đúng 1 đối số")
+    try:
+        thunks[0]()
+        return False
+    except FormulaError as exc:
+        return getattr(exc, "etype", ERR_VALUE) != ERR_NA
+
+
+def _fn_isna_lazy(thunks):
+    if len(thunks) != 1:
+        raise FormulaError("ISNA cần đúng 1 đối số")
+    try:
+        thunks[0]()
+        return False
+    except FormulaError as exc:
+        return getattr(exc, "etype", ERR_VALUE) == ERR_NA
+
+
+def _fn_ifna_lazy(thunks):
+    if len(thunks) != 2:
+        raise FormulaError("IFNA cần đúng 2 đối số")
+    try:
+        return thunks[0]()
+    except FormulaError as exc:
+        if getattr(exc, "etype", ERR_VALUE) == ERR_NA:
+            return thunks[1]()
+        raise
+
+
+def _fn_switch_lazy(thunks):
+    if len(thunks) < 3:
+        raise FormulaError("SWITCH cần biểu_thức + ít nhất 1 cặp (giá_trị, kết_quả)")
+    expr = thunks[0]()
+    i = 1
+    while i + 1 < len(thunks):
+        if _loose_equal(expr, thunks[i]()):
+            return thunks[i + 1]()
+        i += 2
+    if i < len(thunks):  # thunk lẻ cuối = giá trị mặc định
+        return thunks[i]()
+    raise FormulaError("SWITCH: không khớp và không có mặc định", ERR_NA)
+
+
 _FUNCTIONS: dict[str, Callable] = {
     "SUM": _fn_sum,
     "AVERAGE": _fn_average,
@@ -1108,6 +1869,72 @@ _FUNCTIONS: dict[str, Callable] = {
     "LARGE": _fn_large,
     "SMALL": _fn_small,
     "RANK": _fn_rank,
+    # === v0.11.3: thông tin ===
+    "ISNUMBER": _fn_isnumber,
+    "ISTEXT": _fn_istext,
+    "ISNONTEXT": _fn_isnontext,
+    "ISBLANK": _fn_isblank,
+    "ISLOGICAL": _fn_islogical,
+    "ISEVEN": _fn_iseven,
+    "ISODD": _fn_isodd,
+    "NA": _fn_na,
+    # === v0.11.3: logic ===
+    "XOR": _fn_xor,
+    # === v0.11.3: chuỗi ===
+    "TEXTJOIN": _fn_textjoin,
+    "EXACT": _fn_exact,
+    "CHAR": _fn_char,
+    "UNICHAR": _fn_unichar,
+    "CODE": _fn_code,
+    "UNICODE": _fn_unicode,
+    "CLEAN": _fn_clean,
+    "T": _fn_t,
+    "FIXED": _fn_fixed,
+    # === v0.11.3: tra cứu ===
+    "CHOOSE": _fn_choose,
+    "XLOOKUP": _fn_xlookup,
+    # === v0.11.3: toán/lượng giác ===
+    "SIN": _math1("SIN", math.sin),
+    "COS": _math1("COS", math.cos),
+    "TAN": _math1("TAN", math.tan),
+    "ASIN": _math1("ASIN", math.asin),
+    "ACOS": _math1("ACOS", math.acos),
+    "ATAN": _math1("ATAN", math.atan),
+    "SINH": _math1("SINH", math.sinh),
+    "COSH": _math1("COSH", math.cosh),
+    "TANH": _math1("TANH", math.tanh),
+    "LOG10": _math1("LOG10", math.log10),
+    "ATAN2": _fn_atan2,
+    "DEGREES": _fn_degrees,
+    "RADIANS": _fn_radians,
+    "GCD": _fn_gcd,
+    "LCM": _fn_lcm,
+    "FACT": _fn_fact,
+    "COMBIN": _fn_combin,
+    "PERMUT": _fn_permut,
+    "MROUND": _fn_mround,
+    "EVEN": _fn_even,
+    "ODD": _fn_odd,
+    "QUOTIENT": _fn_quotient,
+    "SUMSQ": _fn_sumsq,
+    # === v0.11.3: thống kê ===
+    "AVERAGEIFS": _fn_averageifs,
+    "MAXIFS": _fn_maxifs,
+    "MINIFS": _fn_minifs,
+    "STDEVP": _fn_stdevp,
+    "VARP": _fn_varp,
+    "GEOMEAN": _fn_geomean,
+    "HARMEAN": _fn_harmean,
+    "AVERAGEA": _fn_averagea,
+    # === v0.11.3: ngày/giờ ===
+    "EDATE": _fn_edate,
+    "EOMONTH": _fn_eomonth,
+    "TIME": _fn_time,
+    "SECOND": _fn_second,
+    "DAYS": _fn_days,
+    "DATEVALUE": _fn_datevalue,
+    "WEEKNUM": _fn_weeknum,
+    "ISOWEEKNUM": _fn_isoweeknum,
 }
 
 # Hàm tính lười: nhận danh sách thunk (đối số chưa tính), tự quyết định
@@ -1116,6 +1943,12 @@ _LAZY_FUNCTIONS: dict[str, Callable] = {
     "IF": _fn_if_lazy,
     "IFERROR": _fn_iferror_lazy,
     "IFS": _fn_ifs_lazy,
+    # === v0.11.3: bắt lỗi (cần tính lười để bắt được FormulaError) ===
+    "ISERROR": _fn_iserror_lazy,
+    "ISERR": _fn_iserr_lazy,
+    "ISNA": _fn_isna_lazy,
+    "IFNA": _fn_ifna_lazy,
+    "SWITCH": _fn_switch_lazy,
 }
 
 
@@ -1198,7 +2031,7 @@ class _Parser:
                 else:
                     d = _to_number(rhs)
                     if d == 0:
-                        raise FormulaError("Chia cho 0")
+                        raise FormulaError("Chia cho 0", ERR_DIV0)
                     value = _to_number(value) / d
             else:
                 return value
@@ -1248,7 +2081,7 @@ class _Parser:
             self._expect_op(")")
             return _LAZY_FUNCTIONS[fname](thunks)
         if fname not in _FUNCTIONS:
-            raise FormulaError(f"Hàm không hỗ trợ: {name}")
+            raise FormulaError(f"Hàm không hỗ trợ: {name}", ERR_NAME)
         args: list = []
         if not (self._peek() and self._peek().kind == "OP" and self._peek().value == ")"):
             args.extend(self._arg())
@@ -1429,10 +2262,28 @@ def extract_refs(formula_str: str) -> set[tuple[int, int]]:
     return refs
 
 
+def _finalize(value):
+    """Chuẩn hóa kết quả cuối trước khi trả cho ô.
+
+    - Vùng 1 ô -> giá trị ô đó; vùng nhiều ô -> #VALUE! (engine scalar, chưa
+      hỗ trợ spill) — tránh hiển thị repr ``<_Range object>`` (vd CHOOSE/IF).
+    - Số inf/nan (tràn số, vd POWER/SUMSQ) -> #NUM! thay vì hiện 'inf'.
+    """
+    if isinstance(value, _Range):
+        flat = value.flat()
+        if len(flat) == 1:
+            value = flat[0]
+        else:
+            raise FormulaError("Kết quả là vùng nhiều ô (chưa hỗ trợ spill)", ERR_VALUE)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise FormulaError("Kết quả không hữu hạn", ERR_NUM)
+    return value
+
+
 def evaluate(formula: str, resolver: Callable[[int, int], object]):
     """Tính một công thức (đã có dấu '=') và trả về số hoặc chuỗi."""
     body = formula[1:] if formula.startswith("=") else formula
     tokens = _tokenize(body)
     if not tokens:
         raise FormulaError("Công thức rỗng")
-    return _Parser(tokens, resolver).parse()
+    return _finalize(_Parser(tokens, resolver).parse())

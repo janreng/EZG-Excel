@@ -6,6 +6,47 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.11.3] - 2026-06-02
+
+### Thêm mới
+- **Mở rộng thư viện hàm từ ~60 lên ~120 hàm** (toàn bộ là hàm vô hướng,
+  không đổi mô hình ô — an toàn, tương thích ngược):
+  - Thông tin: `ISNUMBER, ISTEXT, ISNONTEXT, ISBLANK, ISLOGICAL, ISEVEN,`
+    `ISODD, ISERROR, ISERR, ISNA, NA`
+  - Logic: `XOR, IFNA, SWITCH`
+  - Chuỗi: `TEXTJOIN, EXACT, CHAR, UNICHAR, CODE, UNICODE, CLEAN, T, FIXED`
+  - Tra cứu: `XLOOKUP` (match_mode 0/-1/1/2 + search_mode 1/-1), `CHOOSE`
+  - Toán/lượng giác: `SIN, COS, TAN, ASIN, ACOS, ATAN, ATAN2, SINH, COSH,`
+    `TANH, DEGREES, RADIANS, LOG10, GCD, LCM, FACT, COMBIN, PERMUT, MROUND,`
+    `EVEN, ODD, QUOTIENT, SUMSQ`
+  - Thống kê: `AVERAGEIFS, MAXIFS, MINIFS, STDEVP, VARP, GEOMEAN, HARMEAN,`
+    `AVERAGEA`
+  - Ngày/giờ: `EDATE, EOMONTH, TIME, SECOND, DAYS, DATEVALUE, WEEKNUM,`
+    `ISOWEEKNUM`
+- **Mã lỗi kiểu Excel**: ô hiển thị `#DIV/0!`, `#N/A`, `#VALUE!`, `#NUM!`,
+  `#NAME?`, `#REF!` thay vì `#LỖI!` chung chung. `ISERROR/ISERR/ISNA/IFNA`
+  phân loại đúng theo mã.
+
+### Sửa lỗi
+- **Chống treo (crash)**: các công thức gây lỗi Python (không phải lỗi công
+  thức) trước đây làm hỏng việc tính lại — nay đều trả mã lỗi:
+  - `*IFS` với các vùng lệch kích thước → `#VALUE!` (trước: treo `IndexError`).
+  - Giá trị `inf`/`NaN`, số quá lớn (`FACT(171)`, `POWER(10,1000)`, tổng tràn)
+    → `#NUM!`.
+  - `UNICHAR` mã ngoài phạm vi, `EDATE/EOMONTH` ngày ngoài `1..9999` → lỗi
+    rõ ràng thay vì treo.
+  - `CHOOSE` trả về vùng nhiều ô không còn hiển thị rác `<_Range object>`.
+- **Tokenizer**: tên hàm kết thúc bằng số (`ATAN2`, `LOG10`) không còn bị
+  nhầm thành tham chiếu ô.
+- `GCD/LCM` với số âm → `#NUM!` (đúng Excel, trước đây lấy trị tuyệt đối).
+
+### Cải thiện (hiệu năng)
+- **Tiêu chí `*IF/*IFS` biên dịch một lần** thay vì phân tích lại trên mỗi ô:
+  bỏ cấp phát dict thừa trên đường nóng (`_compile_criteria`). Đo trên 100k ô:
+  khớp tiêu chí nhanh hơn **~3.8×** (291ms → 77ms).
+- Wildcard (`*`, `?`, `~`) trong `COUNTIF/SUMIF/XLOOKUP` khớp đúng kiểu Excel
+  (không còn diễn giải `[...]` như fnmatch).
+
 ## [0.11.2] - 2026-06-02
 
 ### Thêm mới

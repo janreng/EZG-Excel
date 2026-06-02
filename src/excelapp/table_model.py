@@ -193,8 +193,9 @@ class SpreadsheetModel(QAbstractTableModel):
         self._computing.add(key)
         try:
             value = formula.evaluate(raw, self._cell_value)
-        except formula.FormulaError:
-            value = "#LỖI!"
+        except formula.FormulaError as exc:
+            # Hiển thị mã lỗi kiểu Excel (#DIV/0!, #N/A, #VALUE!, ...).
+            value = getattr(exc, "etype", None) or "#VALUE!"
         except RecursionError:
             value = "#VÒNG_LẶP!"
         finally:

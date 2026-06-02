@@ -8,23 +8,33 @@
 - 📂 Mở & xem file `.csv`, `.xlsx`
 - ✏️ Sửa từng ô, lưu lại ra CSV/XLSX (Lưu / Lưu thành)
 - ➕➖ Chèn / xóa dòng và cột (menu **Sửa**)
-- 🔢 **Công thức** (gõ bắt đầu bằng `=`) — ~60 hàm:
+- 🔢 **Công thức** (gõ bắt đầu bằng `=`) — ~120 hàm:
   - Toán tử: `+ - * / ^`, ngoặc `()`, so sánh `> < >= <= = <>`
   - Tham chiếu ô `A1`, vùng `A1:B5`
-  - Gộp: `SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, PRODUCT`
-  - Logic: `IF, AND, OR, NOT, IFERROR, IFS, TRUE, FALSE`
-  - Điều kiện: `COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF`
-  - Tra cứu: `VLOOKUP, HLOOKUP, INDEX, MATCH, LOOKUP`
+  - Mã lỗi kiểu Excel: `#DIV/0!, #N/A, #VALUE!, #NUM!, #NAME?, #REF!`
+  - Gộp: `SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, PRODUCT, SUMSQ`
+  - Logic: `IF, AND, OR, NOT, XOR, IFERROR, IFNA, IFS, SWITCH, TRUE, FALSE`
+  - Thông tin: `ISNUMBER, ISTEXT, ISNONTEXT, ISBLANK, ISLOGICAL, ISEVEN,`
+    `ISODD, ISERROR, ISERR, ISNA, NA`
+  - Điều kiện: `COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF, AVERAGEIFS,`
+    `MAXIFS, MINIFS`
+  - Tra cứu: `VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, LOOKUP, CHOOSE`
   - Chuỗi: `LEFT, RIGHT, MID, LEN, TRIM, UPPER, LOWER, PROPER, REPT,`
-    `REPLACE, SUBSTITUTE, FIND, SEARCH, VALUE, TEXT, CONCAT`
-  - Toán: `ABS, ROUND, ROUNDUP, ROUNDDOWN, SQRT, INT, MOD, POWER,`
-    `CEILING, FLOOR, TRUNC, SIGN, SUMPRODUCT, PI, EXP, LOG, LN`
-  - Ngày/giờ: `TODAY, NOW, DATE, YEAR, MONTH, DAY, HOUR, MINUTE,`
-    `WEEKDAY, DATEDIF`
-  - Thống kê: `MEDIAN, MODE, STDEV, VAR, LARGE, SMALL, RANK`
+    `REPLACE, SUBSTITUTE, FIND, SEARCH, VALUE, TEXT, CONCAT, TEXTJOIN,`
+    `EXACT, CHAR, UNICHAR, CODE, UNICODE, CLEAN, T, FIXED`
+  - Toán: `ABS, ROUND, ROUNDUP, ROUNDDOWN, SQRT, INT, MOD, POWER, QUOTIENT,`
+    `CEILING, FLOOR, TRUNC, SIGN, SUMPRODUCT, PI, EXP, LOG, LN, LOG10,`
+    `GCD, LCM, FACT, COMBIN, PERMUT, MROUND, EVEN, ODD`
+  - Lượng giác: `SIN, COS, TAN, ASIN, ACOS, ATAN, ATAN2, SINH, COSH, TANH,`
+    `DEGREES, RADIANS`
+  - Ngày/giờ: `TODAY, NOW, DATE, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,`
+    `WEEKDAY, WEEKNUM, ISOWEEKNUM, DATEDIF, EDATE, EOMONTH, TIME, DAYS,`
+    `DATEVALUE`
+  - Thống kê: `MEDIAN, MODE, STDEV, STDEVP, VAR, VARP, LARGE, SMALL, RANK,`
+    `GEOMEAN, HARMEAN, AVERAGEA`
   - Ngẫu nhiên: `RAND/RANDOM, RANDBETWEEN`
-  - Ví dụ: `=SUM(A1:A10)`, `=VLOOKUP(B2,D:E,2,FALSE())`,
-    `=IF(B2>5,"Đạt","Trượt")`, `=COUNTIF(A:A,">100")`
+  - Ví dụ: `=SUM(A1:A10)`, `=XLOOKUP("Táo",A:A,B:B)`,
+    `=IF(B2>5,"Đạt","Trượt")`, `=IFERROR(A1/B1,0)`, `=COUNTIF(A:A,">100")`
 - 🔍 Tìm kiếm (Ctrl+F mở popup, tự vòng lại)
 - ↕️ Sắp xếp theo cột (menu **Dữ liệu**, hoặc nhấp đúp tiêu đề cột)
 - 🖱️ **Menu chuột phải** (copy, cut, paste, chèn/xóa dòng-cột, xóa nội dung)
