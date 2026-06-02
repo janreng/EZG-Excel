@@ -1,4 +1,4 @@
-# Ezcel v0.11.3
+# Ezcel v0.12.0
 
 Mở rộng lớn thư viện hàm công thức + mã lỗi kiểu Excel + vá nhiều lỗi treo.
 
@@ -42,4 +42,4 @@ Mở rộng lớn thư viện hàm công thức + mã lỗi kiểu Excel + vá n
   smart-tag lỗi, dynamic array (FILTER/SORT/UNIQUE/spill) chưa có — xem
   `docs/specs/12-formula-system.md` (Phase 4 & 6).
 - Cài đè được lên bản cũ (cùng AppId). Người dùng 0.11.x bấm Trợ giúp → Kiểm
-  tra cập nhật để lên 0.11.3.
+  tra cập nhật để lên 0.12.0.

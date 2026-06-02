@@ -1,17 +1,17 @@
-# NIGHT NOTES — phiên làm đêm 2026-06-02 (v0.11.3)
+# NIGHT NOTES — phiên làm đêm 2026-06-02 (v0.12.0)
 
 Ghi chú cho sếp đọc sáng. Tóm tắt việc đã làm, quyết định tự ra, và những thứ
 cần sếp để mắt.
 
 ---
 
-## ✅ Đã làm — v0.11.3 "Mở rộng thư viện hàm + taxonomy lỗi"
+## ✅ Đã làm — v0.12.0 "Mở rộng thư viện hàm + taxonomy lỗi"
 
 - Thêm **~60 hàm Excel** (tổng ~120): Information (IS*), Logical (XOR/IFNA/
   SWITCH), Text (TEXTJOIN/EXACT/CHAR/CODE/CLEAN/T/FIXED), Lookup (XLOOKUP/
   CHOOSE), Math+Trig, Stats (AVERAGEIFS/MAXIFS/MINIFS/STDEVP/VARP/GEOMEAN...),
   Date (EDATE/EOMONTH/TIME/WEEKNUM...). Chi tiết: `CHANGELOG.md`,
-  `docs/release-notes-v0.11.3.md`.
+  `docs/release-notes-v0.12.0.md`.
 - **Mã lỗi kiểu Excel** (`#DIV/0! #N/A #VALUE! #NUM! #NAME? #REF!`) thay cho
   `#LỖI!` chung chung. `table_model.py` hiển thị `FormulaError.etype`.
 - **Test**: `tests/test_formula_v0113.py` — **74/74 pass** (gồm test chống treo).
@@ -38,7 +38,7 @@ cần sếp để mắt.
 ## 🧭 Quyết định tự ra (vì sếp bảo "tự quyết, đừng hỏi")
 
 1. **Scope = mở rộng hàm formula**, không đụng UI/model → an toàn ship cho user
-   qua auto-update. Coi đây là **1 tính năng cohesive = 1 release v0.11.3**
+   qua auto-update. Coi đây là **1 tính năng cohesive = 1 release v0.12.0**
    (KHÔNG gom thêm feature khác). Feature sau (multi-sheet, Format Cells...) sẽ
    tách release riêng như sếp dặn. Nếu sếp muốn tách nhỏ hơn (mỗi nhóm hàm 1
    bản) → nói em làm lại.
@@ -52,7 +52,7 @@ cần sếp để mắt.
 ## ⚠️ Blocker / hạn chế cần sếp biết
 
 - **Inno Setup CHƯA cài trên máy** → KHÔNG build được installer
-  `Ezcel-Setup-0.11.3.exe`. Release đính kèm bản **portable .zip** (onedir) thay
+  `Ezcel-Setup-0.12.0.exe`. Release đính kèm bản **portable .zip** (onedir) thay
   thế. Auto-update của user cần file installer `.exe` → muốn user update được
   qua nút "Kiểm tra cập nhật", sếp cần: cài Inno Setup → `build_installer.bat`
   → upload `.exe` vào release → bỏ prerelease. (Em để prerelease nên chưa ảnh
@@ -81,7 +81,7 @@ cần sếp để mắt.
 
 ## 🚀 Cách phát hành chính thức (khi sếp duyệt)
 1. Mở `dist\Ezcel\Ezcel.exe` kiểm tra nhanh vài công thức mới.
-2. Cài Inno Setup → chạy `build_installer.bat` → ra `installer\Ezcel-Setup-0.11.3.exe`.
-3. Vào GitHub release `v0.11.3`: upload file installer `.exe`, **bỏ tick
+2. Cài Inno Setup → chạy `build_installer.bat` → ra `installer\Ezcel-Setup-0.12.0.exe`.
+3. Vào GitHub release `v0.12.0`: upload file installer `.exe`, **bỏ tick
    pre-release** (đặt là Latest).
-4. User bấm Trợ giúp → Kiểm tra cập nhật → lên 0.11.3.
+4. User bấm Trợ giúp → Kiểm tra cập nhật → lên 0.12.0.

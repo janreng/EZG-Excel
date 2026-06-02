@@ -6,7 +6,7 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
-## [0.11.3] - 2026-06-02
+## [0.12.0] - 2026-06-02
 
 ### Thêm mới
 - **Mở rộng thư viện hàm từ ~60 lên ~120 hàm** (toàn bộ là hàm vô hướng,
