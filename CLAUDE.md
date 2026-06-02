@@ -74,8 +74,8 @@ self._undo / self._redo: list[tuple]        # snapshot (_data, _fmt), tối đa 
 - **Comment/chuỗi tiếng Việt** xuyên suốt mã nguồn — giữ nhất quán.
 - Chuỗi UI mới **phải** thêm vào `i18n.py` ở **cả** `vi` và `en`.
 - **Console Windows dùng cp1252** — tránh `print` tiếng Việt trong script test (dùng assert/pytest, không print Unicode).
-- **Định dạng hiện chưa được lưu xuống file** (CSV/XLSX) — chỉ tồn tại trong phiên. `save_xlsx`/`load_xlsx` mới xử lý giá trị + công thức.
-- Undo/redo dựa trên snapshot toàn bộ `(_data, _fmt)` → state mới muốn được hoàn tác phải nằm trong snapshot.
+- **XLSX lưu được định dạng + ô gộp** (`io_utils.save_xlsx/load_xlsx` map sang openpyxl styles). CSV chỉ lưu giá trị. `load_file` trả `(rows, fmt, merges)`. Conditional formatting chưa ghi vào file.
+- Undo/redo dựa trên snapshot `("snapshot", data, fmt, merges, cond)` → state mới muốn được hoàn tác phải nằm trong snapshot.
 - Một sheet mỗi file (chưa hỗ trợ nhiều sheet/tab).
 - Khi user xác nhận "ok/ổn" cho một feature → tự commit feature đó.
 

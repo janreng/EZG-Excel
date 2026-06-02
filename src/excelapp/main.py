@@ -27,7 +27,8 @@ def main() -> int:
         try:
             from . import io_utils
 
-            window.model.replace_all(io_utils.load_file(sys.argv[1]))
+            rows, fmt, merges = io_utils.load_file(sys.argv[1])
+            window.model.replace_all_with_fmt(rows, fmt, merges)
             from pathlib import Path
 
             window.current_path = Path(sys.argv[1])

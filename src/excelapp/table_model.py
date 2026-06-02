@@ -403,12 +403,15 @@ class SpreadsheetModel(QAbstractTableModel):
         self.endResetModel()
         self.mergesChanged.emit()
 
-    def replace_all_with_fmt(self, rows: list[list[str]], fmt: dict) -> None:
-        """Như replace_all nhưng kèm định dạng (khi mở file xlsx)."""
+    def replace_all_with_fmt(self, rows: list[list[str]], fmt: dict,
+                             merges: list | None = None) -> None:
+        """Như replace_all nhưng kèm định dạng + ô gộp (khi mở file xlsx)."""
         self.replace_all(rows)
         self.beginResetModel()
-        self._fmt = fmt
+        self._fmt = fmt or {}
+        self._merges = list(merges or [])
         self.endResetModel()
+        self.mergesChanged.emit()
 
     def raw_grid(self) -> list[list[str]]:
         """Bản sao dữ liệu thô để lưu file."""

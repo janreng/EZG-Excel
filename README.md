@@ -127,8 +127,9 @@ Sửa màu/hình trong file đó rồi chạy lại để đổi icon.
 
 ## Giới hạn hiện tại
 
-- Định dạng (font, canh lề, wrap...) hiện **chưa được lưu** khi ghi ra file
-  (CSV/XLSX) — chỉ giữ trong phiên làm việc.
+- **CSV** không lưu định dạng (đúng bản chất CSV). Lưu **XLSX** để giữ định
+  dạng (màu nền/chữ, viền, căn lề, định dạng số) và **ô gộp**.
+- Định dạng có điều kiện (conditional formatting) hiện chưa ghi vào file.
 - Sắp xếp di chuyển vật lý các dòng nên công thức dùng tham chiếu tuyệt đối
   (vd `A1`) có thể lệch sau khi sắp xếp — giống thao tác sort thủ công.
-- Một sheet mỗi file; chưa có gộp ô, màu nền, biểu đồ.
+- Một sheet mỗi file; chưa có biểu đồ.

@@ -968,12 +968,13 @@ class MainWindow(QMainWindow):
         def on_cancel():
             cancelled[0] = True
 
-        def on_done(rows):
+        def on_done(result):
             dlg.reset()
             worker.wait()
             if cancelled[0]:
                 return
-            self.model.replace_all(rows)
+            rows, fmt, merges = result
+            self.model.replace_all_with_fmt(rows, fmt, merges)
             self.current_path = Path(path)
             self._update_title()
             self.statusBar().showMessage(tr("opened", path=path), 5000)
@@ -1005,14 +1006,16 @@ class MainWindow(QMainWindow):
         self._save_to(Path(path))
 
     def _save_to(self, path: Path) -> None:
-        # Snapshot grid trên main thread trước — worker thread chỉ ghi file.
+        # Snapshot grid + định dạng trên main thread trước — worker chỉ ghi file.
         rows = self.model.raw_grid()
+        fmt = self.model.all_formats()
+        merges = self.model.merges()
 
         dlg = QProgressDialog(tr("saving_file"), tr("cancel"), 0, 0, self)
         dlg.setWindowModality(Qt.WindowModal)
         dlg.setMinimumDuration(400)
 
-        worker = _IoWorker(lambda: io_utils.save_file(path, rows), self)
+        worker = _IoWorker(lambda: io_utils.save_file(path, rows, fmt, merges), self)
         cancelled = [False]
 
         def on_cancel():
