@@ -20,8 +20,10 @@
 - 🎨 **Bôi đen kiểu Google Sheets**: viền xanh quanh vùng chọn, ô hiện tại
   để trắng, các ô còn lại tô xanh nhạt
 - 🌐 **Đa ngôn ngữ**: Tiếng Việt / English (menu **Ngôn ngữ**, tự nhớ lựa chọn)
-- 🅰️ **Định dạng**: chọn phông chữ, cỡ chữ, in đậm/nghiêng, canh lề ngang/dọc,
-  xuống dòng (text wrap) — qua thanh công cụ
+- 🅰️ **Định dạng**: phông chữ, cỡ chữ, in đậm/nghiêng; **dropdown** canh lề
+  ngang/dọc và xuống dòng (Tràn / Xuống dòng / Cắt) kiểu Google Sheets
+- 🔻 **Bộ lọc (Filter)** như Excel: nút phễu → Sort A→Z/Z→A + tick chọn giá trị
+  (có ô tìm, Select all/Clear) → ẩn dòng không khớp
 - 📌 **Cố định dòng/cột (Freeze)** kiểu Google Sheets (menu **Xem**)
 - 📋 **Dán văn bản thuần** (Ctrl+Shift+V — chỉ dán giá trị)
 - ⌨️ **Tùy chỉnh phím tắt** (menu **Cài đặt → Tùy chỉnh phím tắt**, tự nhớ)

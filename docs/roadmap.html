@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roadmap — EZG Excel tiến gần Microsoft Excel</title>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --muted: #656d76;
+    --accent: #1a73e8;
+    --green: #1e8e3e;
+    --red: #d93025;
+    --border: #d0d7de;
+    --code-bg: #f0f2f4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.hero {
+    background: linear-gradient(135deg, #1a73e8, #1557b0);
+    color: #fff;
+    border-radius: 16px;
+    padding: 32px 36px;
+    margin-bottom: 28px;
+    box-shadow: 0 6px 24px rgba(26,115,232,.25);
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 28px; }
+  header.hero p { margin: 0; opacity: .92; font-size: 15px; }
+  .pills { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { background: rgba(255,255,255,.18); padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  h2 { font-size: 22px; margin: 4px 0 14px; display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 16px; margin: 20px 0 8px; color: var(--accent); }
+  .phase-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 16px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .goal { background: var(--code-bg); border-left: 4px solid var(--accent); padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 10px 0 16px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  th { background: var(--code-bg); font-weight: 600; }
+  td.yes { color: var(--green); font-weight: 700; }
+  td.no { color: var(--red); font-weight: 700; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }
+  .fn-group { margin: 8px 0; }
+  .fn-group b { color: var(--ink); }
+  .fn-tag { display: inline-block; background: #e8f0fe; color: #1557b0; padding: 2px 8px; margin: 2px; border-radius: 6px; font-family: Consolas, monospace; font-size: 12.5px; }
+  .note { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px 16px; font-size: 14px; margin: 14px 0; }
+  .note b { color: #b06000; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .steporder { counter-reset: step; list-style: none; padding-left: 0; }
+  .steporder li { counter-increment: step; padding-left: 40px; position: relative; margin: 10px 0; }
+  .steporder li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--green); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 30px; }
+  .tag-scope { font-size: 12px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+  .scope-in { background: #e6f4ea; color: var(--green); }
+  .scope-out { background: #fce8e6; color: var(--red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>🗺️ Roadmap: EZG&nbsp;-&nbsp;Excel tiến gần Microsoft Excel</h1>
+    <p>Kế hoạch phát triển 4 nhóm tính năng, sắp xếp theo độ phụ thuộc kỹ thuật.</p>
+    <div class="pills">
+      <span class="pill">Phase 1 · Hàm công thức</span>
+      <span class="pill">Phase 2 · Định dạng UI</span>
+      <span class="pill">Phase 3 · Lưu định dạng</span>
+      <span class="pill">Phase 4 · Nhiều sheet</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2>📌 Bối cảnh</h2>
+    <p>EZG - Excel (<code>d:\Python\excel</code>) là một spreadsheet PySide6 đã khá hoàn chỉnh: formula engine 17 hàm, undo/redo 100 mức, freeze panes, filter, sort, autofill (fill handle kiểu Google Sheets), find/replace, i18n Việt/Anh, auto-update qua GitHub. Tuy nhiên so với Microsoft Excel còn thiếu nhiều mảng lớn.</p>
+    <p>Mục tiêu phát triển <b>4 nhóm tính năng</b>:</p>
+    <ul>
+      <li><b>Mở rộng hàm công thức</b> (Excel 400+, app mới 17)</li>
+      <li><b>Định dạng nâng cao trong UI</b> (màu nền/chữ, border, merge, định dạng số, conditional formatting)</li>
+      <li><b>Lưu định dạng vào file</b> (hiện định dạng chỉ tồn tại trong phiên — lỗ hổng lớn nhất)</li>
+      <li><b>Nhiều sheet/tab</b> (hiện 1 sheet/file)</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>📊 So sánh tổng quan với Microsoft Excel</h2>
+    <table>
+      <thead><tr><th>Mảng</th><th>EZG hiện tại</th><th>Excel</th><th>Trong roadmap</th></tr></thead>
+      <tbody>
+        <tr><td>Hàm công thức</td><td>17 hàm</td><td>400+</td><td><b>Phase 1</b></td></tr>
+        <tr><td>Màu nền/chữ ô</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 2</b></td></tr>
+        <tr><td>Border</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 2</b></td></tr>
+        <tr><td>Merge cells</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 2</b></td></tr>
+        <tr><td>Định dạng số (tiền tệ, %, ngày)</td><td class="no">✗ (chỉ auto)</td><td class="yes">✓</td><td><b>Phase 2</b></td></tr>
+        <tr><td>Conditional formatting</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 2 (mở rộng)</b></td></tr>
+        <tr><td>Lưu định dạng vào xlsx</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 3</b></td></tr>
+        <tr><td>Nhiều sheet/tab</td><td class="no">✗</td><td class="yes">✓</td><td><b>Phase 4</b></td></tr>
+        <tr><td>Pivot table</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>Chart/biểu đồ</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>Data validation / dropdown</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>Cell comments/notes</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>Named ranges</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>Macros/VBA</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+        <tr><td>In ấn / xuất PDF</td><td class="no">✗</td><td class="yes">✓</td><td class="muted">Ngoài phạm vi</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2><span class="phase-num">1</span> Mở rộng hàm công thức</h2>
+    <div class="goal"><b>Mục tiêu:</b> Đưa từ 17 → ~50-60 hàm phổ biến nhất, đủ dùng cho 90% nhu cầu thực tế. Phase <b>độc lập, rủi ro thấp</b>, thuần bổ sung vào <code>src/excelapp/formula.py</code>.</div>
+
+    <h3>Vị trí sửa</h3>
+    <p class="muted">Dict <code>_FUNCTIONS</code> và các hàm <code>_fn_*</code>. Parser recursive-descent (<code>_Parser</code>) đã hỗ trợ gọi hàm lồng nhau và range — đa số hàm chỉ cần thêm vào registry.</p>
+
+    <h3>Các hàm cần thêm theo nhóm</h3>
+    <div class="fn-group"><b>Logic:</b><br>
+      <span class="fn-tag">AND</span><span class="fn-tag">OR</span><span class="fn-tag">NOT</span><span class="fn-tag">IFERROR</span><span class="fn-tag">IFS</span><span class="fn-tag">TRUE</span><span class="fn-tag">FALSE</span>
+    </div>
+    <div class="fn-group"><b>Thống kê có điều kiện:</b><br>
+      <span class="fn-tag">COUNTIF</span><span class="fn-tag">COUNTIFS</span><span class="fn-tag">SUMIF</span><span class="fn-tag">SUMIFS</span><span class="fn-tag">AVERAGEIF</span><span class="fn-tag">COUNTA</span><span class="fn-tag">COUNTBLANK</span>
+    </div>
+    <div class="fn-group"><b>Tra cứu:</b><br>
+      <span class="fn-tag">VLOOKUP</span><span class="fn-tag">HLOOKUP</span><span class="fn-tag">INDEX</span><span class="fn-tag">MATCH</span><span class="fn-tag">LOOKUP</span>
+      <span class="muted">(VLOOKUP được yêu cầu nhiều nhất)</span>
+    </div>
+    <div class="fn-group"><b>Chuỗi:</b><br>
+      <span class="fn-tag">LEFT</span><span class="fn-tag">RIGHT</span><span class="fn-tag">MID</span><span class="fn-tag">LEN</span><span class="fn-tag">TRIM</span><span class="fn-tag">UPPER</span><span class="fn-tag">LOWER</span><span class="fn-tag">PROPER</span><span class="fn-tag">REPLACE</span><span class="fn-tag">SUBSTITUTE</span><span class="fn-tag">FIND</span><span class="fn-tag">SEARCH</span><span class="fn-tag">TEXT</span><span class="fn-tag">VALUE</span><span class="fn-tag">REPT</span>
+    </div>
+    <div class="fn-group"><b>Toán bổ sung:</b><br>
+      <span class="fn-tag">CEILING</span><span class="fn-tag">FLOOR</span><span class="fn-tag">TRUNC</span><span class="fn-tag">SIGN</span><span class="fn-tag">PRODUCT</span><span class="fn-tag">SUMPRODUCT</span><span class="fn-tag">ROUNDUP</span><span class="fn-tag">ROUNDDOWN</span><span class="fn-tag">PI</span><span class="fn-tag">EXP</span><span class="fn-tag">LOG</span><span class="fn-tag">LN</span>
+    </div>
+    <div class="fn-group"><b>Ngày/giờ:</b><br>
+      <span class="fn-tag">TODAY</span><span class="fn-tag">NOW</span><span class="fn-tag">DATE</span><span class="fn-tag">YEAR</span><span class="fn-tag">MONTH</span><span class="fn-tag">DAY</span><span class="fn-tag">HOUR</span><span class="fn-tag">MINUTE</span><span class="fn-tag">WEEKDAY</span><span class="fn-tag">DATEDIF</span>
+    </div>
+    <div class="fn-group"><b>Thống kê:</b><br>
+      <span class="fn-tag">MEDIAN</span><span class="fn-tag">MODE</span><span class="fn-tag">STDEV</span><span class="fn-tag">VAR</span><span class="fn-tag">LARGE</span><span class="fn-tag">SMALL</span><span class="fn-tag">RANK</span>
+    </div>
+
+    <div class="note">
+      <b>Lưu ý kỹ thuật:</b>
+      <ul>
+        <li><code>VLOOKUP/HLOOKUP/MATCH/INDEX</code> cần truy cập <b>vùng 2 chiều</b> chứ không chỉ list giá trị phẳng — sẽ thêm lớp <code>_Range</code> giữ ma trận; đây là điểm rủi ro chính của phase.</li>
+        <li>Ngày/giờ: dùng chuẩn serial date của Excel (epoch 1899-12-30).</li>
+        <li>Mở rộng regex <code>_TOKEN_RE</code> nếu cần.</li>
+      </ul>
+    </div>
+    <p class="muted"><b>Test:</b> Tạo <code>tests/test_formula.py</code> (project chưa có thư mục test) — unit test từng nhóm hàm với resolver giả lập.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="phase-num">2</span> Định dạng nâng cao trong UI</h2>
+    <div class="goal"><b>Mục tiêu:</b> Thêm màu nền, màu chữ, border, merge cells, định dạng số. Nền tảng bắt buộc cho Phase 3.</div>
+
+    <h3>Model định dạng</h3>
+    <p>Mở rộng dict <code>_fmt[(row,col)]</code> trong <code>table_model.py</code>. Hiện có: <code>font, size, bold, italic, halign, valign, wrap</code>. Thêm:</p>
+    <ul>
+      <li><code>bg</code> — màu nền (hex <code>#RRGGBB</code>)</li>
+      <li><code>color</code> — màu chữ</li>
+      <li><code>border</code> — dict 4 cạnh <code>{top, bottom, left, right}</code> (style + màu)</li>
+      <li><code>underline</code>, <code>strikethrough</code> — bổ sung kiểu chữ</li>
+      <li><code>number_format</code> — mã định dạng (vd <code>"#,##0.00"</code>, <code>"0%"</code>, <code>"dd/mm/yyyy"</code>)</li>
+    </ul>
+
+    <h3>Render (View)</h3>
+    <p class="muted">Mở rộng <code>CellDelegate.paint()</code> trong <code>view.py</code> vẽ màu nền + border. Màu chữ/underline qua <code>Qt.ForegroundRole</code>/font trong <code>data()</code> của model.</p>
+
+    <h3>Định dạng số</h3>
+    <p class="muted">Áp <code>number_format</code> lên giá trị hiển thị trong <code>_display_value()</code>/<code>_format()</code>. Tái dùng mã định dạng openpyxl hoặc viết formatter cho các preset (Số, Tiền tệ, %, Ngày, Khoa học, Phân số).</p>
+
+    <h3>Merge cells <span class="muted">(phức tạp nhất phase)</span></h3>
+    <ul>
+      <li>Lưu danh sách vùng merge trong model (<code>_merges: list[box]</code>)</li>
+      <li>Dùng <code>setSpan(row,col,rowSpan,colSpan)</code> của QTableView</li>
+      <li>Xử lý chọn/sửa/copy trên ô merge, cập nhật khi insert/delete (tái dùng <code>_shift_fmt</code>)</li>
+    </ul>
+
+    <h3>Toolbar / UI</h3>
+    <p class="muted">Mở rộng toolbar trong <code>main_window.py</code>: nút màu nền (<code>QColorDialog</code>), màu chữ, dropdown border, Merge &amp; Center, dropdown định dạng số, underline/strikethrough. Chuỗi mới vào <code>i18n.py</code> (cả vi &amp; en).</p>
+
+    <h3>Conditional formatting <span class="muted">(làm sau cùng của phase)</span></h3>
+    <p class="muted">Dialog quy tắc (lớn hơn/nhỏ hơn/chứa text/top-N, color scale, data bar). Lưu rule ở cấp model, áp khi tính <code>data()</code>. Tái dùng formula engine (Phase 1) để đánh giá điều kiện.</p>
+
+    <div class="note"><b>Undo/redo:</b> Snapshot <code>(_data, _fmt)</code> hiện có tự bao phủ thuộc tính mới — đảm bảo <code>_merges</code> và rule conditional cũng vào snapshot.</div>
+  </section>
+
+  <section class="card">
+    <h2><span class="phase-num">3</span> Lưu định dạng vào file (xlsx)</h2>
+    <div class="goal"><b>Mục tiêu:</b> Định dạng (Phase 2) được ghi xuống <code>.xlsx</code> và đọc lại — khắc phục lỗ hổng "định dạng chỉ tồn tại trong phiên". <b>Phụ thuộc Phase 2.</b></div>
+
+    <p>Vị trí sửa: <code>io_utils.py</code> — hiện <code>save_xlsx</code>/<code>load_xlsx</code> bỏ qua hoàn toàn định dạng.</p>
+
+    <h3>Thay đổi <code>save_xlsx</code></h3>
+    <ul>
+      <li>Đổi chữ ký: <code>save_xlsx(path, rows, fmt=None, merges=None)</code></li>
+      <li>Map <code>_fmt[(r,c)]</code> → openpyxl: <code>Font</code>, <code>PatternFill</code>, <code>Border</code>, <code>Alignment</code>, <code>cell.number_format</code></li>
+      <li>Ghi merge bằng <code>ws.merge_cells(...)</code>; bỏ chế độ read-only</li>
+    </ul>
+
+    <h3>Thay đổi <code>load_xlsx</code></h3>
+    <ul>
+      <li>Bỏ <code>read_only=True</code> (không đọc đủ style) → đọc giá trị + style</li>
+      <li>Trả về grid + dict định dạng + danh sách merge; map ngược openpyxl → dict <code>_fmt</code></li>
+    </ul>
+
+    <p class="muted">Kết nối model: tái dùng <code>replace_all_with_fmt(rows, fmt)</code> có sẵn; cập nhật <code>save_file</code>/<code>open_file</code> trong <code>main_window.py</code> truyền dict định dạng + merges. CSV vẫn không lưu định dạng (đúng bản chất). Cập nhật README gỡ mục "định dạng không được lưu".</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="phase-num">4</span> Nhiều sheet / tab</h2>
+    <div class="goal"><b>Mục tiêu:</b> Một file chứa nhiều sheet, có thanh tab dưới cùng như Excel/Google Sheets. <b>Thay đổi kiến trúc lớn nhất — làm sau cùng.</b></div>
+
+    <h3>Kiến trúc</h3>
+    <p>Hiện <code>MainWindow</code> giữ <b>một</b> <code>SpreadsheetModel</code>. Refactor sang khái niệm "workbook":</p>
+    <ul>
+      <li>Lớp <code>Workbook</code> giữ <code>list[SpreadsheetModel]</code> + tên sheet + sheet active</li>
+      <li>Đổi tab → <code>view.setModel(workbook.sheets[i])</code></li>
+      <li>Freeze/filter/undo là <b>per-sheet</b> → di chuyển các state (<code>_filters</code>, <code>_undo</code>, freeze config) từ MainWindow vào từng model</li>
+    </ul>
+
+    <h3>UI thanh tab</h3>
+    <p class="muted"><code>QTabBar</code> dưới cùng: tên sheet, tab <code>+</code>, right-click (đổi tên, xóa, di chuyển, đổi màu, nhân bản). Chuỗi mới vào <code>i18n.py</code>.</p>
+
+    <h3>File I/O đa sheet</h3>
+    <p class="muted"><code>load_xlsx</code> lặp <code>wb.worksheets</code>; <code>save_xlsx</code> tạo nhiều worksheet. CSV chỉ 1 sheet (cảnh báo khi lưu workbook nhiều sheet → chỉ lưu sheet active).</p>
+
+    <div class="note"><b>Tham chiếu chéo sheet:</b> Mở rộng <code>formula.py</code> hỗ trợ cú pháp <code>Sheet1!A1</code>; resolver cần biết workbook. Đây là phần rủi ro nhất — có thể tách làm bước phụ sau khi tab cơ bản đã chạy.</div>
+  </section>
+
+  <section class="card">
+    <h2>🚦 Thứ tự thực thi đề xuất</h2>
+    <ol class="steporder">
+      <li><b>Phase 1</b> trước (độc lập, giá trị cao ngay, dễ test) — có thể song song Phase 2.</li>
+      <li><b>Phase 2</b> (nền tảng định dạng).</li>
+      <li><b>Phase 3</b> ngay sau Phase 2 (cùng mạch định dạng).</li>
+      <li><b>Phase 4</b> sau cùng (refactor kiến trúc, rủi ro cao nhất).</li>
+    </ol>
+    <p class="muted">Mỗi phase nên là một nhánh git riêng và commit theo từng nhóm tính năng hoàn chỉnh.</p>
+  </section>
+
+  <section class="card">
+    <h2>✅ Cách kiểm thử end-to-end</h2>
+    <p><b>Chạy app:</b> <code>python -m excelapp</code> (hoặc <code>python run.py</code>) từ <code>d:\Python\excel</code>.</p>
+    <ul>
+      <li><b>Phase 1:</b> <code>python -m pytest tests/</code>; trong app nhập <code>=VLOOKUP(...)</code>, <code>=COUNTIF(...)</code>, <code>=LEFT(...)</code>, <code>=TODAY()</code>.</li>
+      <li><b>Phase 2:</b> chọn vùng → đổi màu nền/chữ/border/merge/định dạng số; kiểm tra render; Ctrl+Z/Ctrl+Y hoàn tác được định dạng.</li>
+      <li><b>Phase 3:</b> định dạng → Lưu <code>.xlsx</code> → mở lại trong app <b>và</b> trong Microsoft Excel thật (round-trip test).</li>
+      <li><b>Phase 4:</b> tạo nhiều sheet, đổi tên/xóa/di chuyển tab, nhập <code>=Sheet2!A1</code>, lưu xlsx nhiều sheet rồi mở lại.</li>
+    </ul>
+    <div class="note"><b>Lưu ý môi trường:</b> Console Windows dùng cp1252 — tránh <code>print</code> tiếng Việt trong script test. Dùng assert/pytest.</div>
+  </section>
+
+  <section class="card">
+    <h2>🔮 Ngoài phạm vi roadmap này</h2>
+    <p class="muted">Đề xuất cho tương lai (Phase 5+): <b>Chart/biểu đồ</b>, <b>Pivot table</b>, <b>Data validation/dropdown</b>, <b>Cell comments/notes</b>, <b>Named ranges</b>, <b>In ấn &amp; xuất PDF</b>, <b>Macros/scripting</b>, <b>Split nâng cao</b>. Mỗi cái nên là một plan riêng.</p>
+  </section>
+
+  <footer>
+    EZG - Excel · Roadmap phát triển · Tạo bằng Claude Code
+  </footer>
+
+</div>
+</body>
+</html>
