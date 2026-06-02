@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
@@ -33,6 +34,8 @@ class SpreadsheetModel(QAbstractTableModel):
         self._eval_cache: dict[tuple[int, int], object] = {}
         self._computing: set[tuple[int, int]] = set()
         self._fmt: dict[tuple[int, int], dict] = {}  # định dạng theo ô
+        # Cache QFont theo nội dung định dạng (nhiều ô cùng style dùng chung).
+        self._font_cache: dict[tuple, QFont | None] = {}
         self._undo: list[tuple] = []
         self._redo: list[tuple] = []
         self._undo_limit = 100
@@ -75,19 +78,28 @@ class SpreadsheetModel(QAbstractTableModel):
         fmt = self._fmt.get((row, col))
         if not fmt:
             return None
-        if not any(k in fmt for k in ("font", "size", "bold", "italic")):
+        # Khóa chỉ gồm thuộc tính ảnh hưởng tới font -> nhiều ô cùng style
+        # chia sẻ một QFont đã tạo sẵn, tránh cấp phát mỗi lần repaint.
+        key = (fmt.get("font"), fmt.get("size"), bool(fmt.get("bold")), bool(fmt.get("italic")))
+        if key in self._font_cache:
+            return self._font_cache[key]
+        family, size, bold, italic = key
+        if not (family or size or bold or italic):
+            self._font_cache[key] = None
             return None
         f = QFont()
-        if fmt.get("font"):
-            f.setFamily(fmt["font"])
-        if fmt.get("size"):
-            f.setPointSize(int(fmt["size"]))
-        f.setBold(bool(fmt.get("bold")))
-        f.setItalic(bool(fmt.get("italic")))
+        if family:
+            f.setFamily(family)
+        if size:
+            f.setPointSize(int(size))
+        f.setBold(bold)
+        f.setItalic(italic)
+        self._font_cache[key] = f
         return f
 
-    def cell_wrap(self, row: int, col: int) -> bool:
-        return bool(self._fmt.get((row, col), {}).get("wrap"))
+    def wrap_mode(self, row: int, col: int) -> str:
+        """'overflow' (mặc định) | 'wrap' (xuống dòng) | 'clip' (cắt)."""
+        return self._fmt.get((row, col), {}).get("wrap") or "overflow"
 
     def _display_value(self, row: int, col: int) -> str:
         value = self._cell_value(row, col)
@@ -215,6 +227,8 @@ class SpreadsheetModel(QAbstractTableModel):
             self._data[i] = [row[j] for j in order]
         self._fmt = {(r, inv[c]): v for (r, c), v in self._fmt.items()}
         self._eval_cache.clear()
+        # Emit toàn lưới: công thức ở cột bất kỳ có thể tham chiếu cột vừa di
+        # chuyển nên giá trị có thể đổi ngoài phạm vi src..dst.
         self.dataChanged.emit(
             self.index(0, 0), self.index(self.rowCount() - 1, n - 1), []
         )
@@ -231,6 +245,8 @@ class SpreadsheetModel(QAbstractTableModel):
         self._data = [self._data[j] for j in order]
         self._fmt = {(inv[r], c): v for (r, c), v in self._fmt.items()}
         self._eval_cache.clear()
+        # Emit toàn lưới: công thức ở dòng bất kỳ có thể tham chiếu dòng vừa di
+        # chuyển nên giá trị có thể đổi ngoài phạm vi src..dst.
         self.dataChanged.emit(
             self.index(0, 0), self.index(n - 1, self.columnCount() - 1), []
         )
@@ -557,11 +573,18 @@ def _as_series(source: list[str]):
     return None
 
 
+@functools.lru_cache(maxsize=64)
+def _ci_pattern(find: str):
+    """Regex (đã compile, cache) để tìm ``find`` không phân biệt hoa/thường."""
+    return re.compile(re.escape(find), re.IGNORECASE)
+
+
 def _replace_substr(text: str, find: str, repl: str, match_case: bool) -> str:
     if match_case:
         return text.replace(find, repl)
     # Thay không phân biệt hoa/thường, giữ phần còn lại nguyên vẹn.
-    return re.sub(re.escape(find), lambda _m: repl, text, flags=re.IGNORECASE)
+    # Pattern compile sẵn & cache theo ``find`` (replace_all loop toàn lưới).
+    return _ci_pattern(find).sub(lambda _m: repl, text)
 
 
 _TRAILING_NUM_RE = re.compile(r"^(.*?)(\d+)$")
