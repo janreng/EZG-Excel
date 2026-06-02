@@ -677,6 +677,8 @@ def _coerce_literal(raw: str):
 def _format(value) -> str:
     if value is None:
         return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
     if isinstance(value, float):
         if value.is_integer():
             return str(int(value))

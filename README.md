@@ -8,12 +8,23 @@
 - 📂 Mở & xem file `.csv`, `.xlsx`
 - ✏️ Sửa từng ô, lưu lại ra CSV/XLSX (Lưu / Lưu thành)
 - ➕➖ Chèn / xóa dòng và cột (menu **Sửa**)
-- 🔢 **Công thức** (gõ bắt đầu bằng `=`):
+- 🔢 **Công thức** (gõ bắt đầu bằng `=`) — ~60 hàm:
   - Toán tử: `+ - * / ^`, ngoặc `()`, so sánh `> < >= <= = <>`
   - Tham chiếu ô `A1`, vùng `A1:B5`
-  - Hàm: `SUM, AVERAGE, MIN, MAX, COUNT, ABS, ROUND, SQRT, INT,`
-    `MOD, POWER, IF, CONCAT, RAND/RANDOM, RANDBETWEEN`
-  - Ví dụ: `=SUM(A1:A10)`, `=IF(B2>5,"Đạt","Trượt")`, `=RANDBETWEEN(1,100)`
+  - Gộp: `SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, PRODUCT`
+  - Logic: `IF, AND, OR, NOT, IFERROR, IFS, TRUE, FALSE`
+  - Điều kiện: `COUNTIF, COUNTIFS, SUMIF, SUMIFS, AVERAGEIF`
+  - Tra cứu: `VLOOKUP, HLOOKUP, INDEX, MATCH, LOOKUP`
+  - Chuỗi: `LEFT, RIGHT, MID, LEN, TRIM, UPPER, LOWER, PROPER, REPT,`
+    `REPLACE, SUBSTITUTE, FIND, SEARCH, VALUE, TEXT, CONCAT`
+  - Toán: `ABS, ROUND, ROUNDUP, ROUNDDOWN, SQRT, INT, MOD, POWER,`
+    `CEILING, FLOOR, TRUNC, SIGN, SUMPRODUCT, PI, EXP, LOG, LN`
+  - Ngày/giờ: `TODAY, NOW, DATE, YEAR, MONTH, DAY, HOUR, MINUTE,`
+    `WEEKDAY, DATEDIF`
+  - Thống kê: `MEDIAN, MODE, STDEV, VAR, LARGE, SMALL, RANK`
+  - Ngẫu nhiên: `RAND/RANDOM, RANDBETWEEN`
+  - Ví dụ: `=SUM(A1:A10)`, `=VLOOKUP(B2,D:E,2,FALSE())`,
+    `=IF(B2>5,"Đạt","Trượt")`, `=COUNTIF(A:A,">100")`
 - 🔍 Tìm kiếm (Ctrl+F mở popup, tự vòng lại)
 - ↕️ Sắp xếp theo cột (menu **Dữ liệu**, hoặc nhấp đúp tiêu đề cột)
 - 🖱️ **Menu chuột phải** (copy, cut, paste, chèn/xóa dòng-cột, xóa nội dung)
