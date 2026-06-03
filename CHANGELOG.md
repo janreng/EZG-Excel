@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.18.1] - 2026-06-03
+
+### Thêm mới
+- **Tự gợi ý khi gõ (AutoComplete)**: khi nhập vào ô, ứng dụng tự gợi ý hoàn thành
+  dựa trên các giá trị chữ đã có ở những ô liền kề trong cùng cột — gõ vài ký tự
+  đầu rồi Enter để chấp nhận.
+
 ## [0.18.0] - 2026-06-03
 
 ### Thêm mới

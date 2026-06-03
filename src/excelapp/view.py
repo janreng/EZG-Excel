@@ -14,8 +14,10 @@ from PySide6.QtGui import QColor, QPainter, QPen, QRegion
 from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
+    QCompleter,
     QFrame,
     QHeaderView,
+    QLineEdit,
     QStyle,
     QStyleOptionHeader,
     QStyleOptionViewItem,
@@ -120,6 +122,20 @@ class CellDelegate(QStyledItemDelegate):
     def __init__(self, view: "SpreadsheetView"):
         super().__init__(view)
         self._view = view
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        # Tự hoàn thành: gợi ý theo các giá trị chữ liền kề cùng cột (kiểu bảng tính).
+        model = self._view.model()
+        if isinstance(editor, QLineEdit) and model is not None \
+                and hasattr(model, "column_entries"):
+            entries = model.column_entries(index.row(), index.column())
+            if entries:
+                comp = QCompleter(entries, editor)
+                comp.setCaseSensitivity(Qt.CaseInsensitive)
+                comp.setCompletionMode(QCompleter.InlineCompletion)
+                editor.setCompleter(comp)
+        return editor
 
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)

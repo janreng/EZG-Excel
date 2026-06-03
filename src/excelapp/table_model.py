@@ -79,6 +79,34 @@ class SpreadsheetModel(QAbstractTableModel):
         """Ô có màu nền riêng không — kiểm tra không sao chép dict (dùng ở hot path vẽ)."""
         return "bg" in self._fmt.get((row, col), ())
 
+    def column_entries(self, row: int, col: int) -> list[str]:
+        """Các giá trị CHỮ phân biệt trong khối ô liền kề dọc quanh (row,col) cùng cột.
+
+        Dùng cho tự-hoàn-thành khi gõ (AutoComplete): bỏ ô hiện tại, bỏ ô số/trống,
+        chỉ lấy trong khối liền kề (dừng ở ô trống) như bảng tính chuẩn.
+        """
+        seen: list[str] = []
+        seen_lower: set[str] = set()
+
+        def consider(r: int) -> None:
+            v = self._cell_value(r, col)
+            if _looks_numeric(v):
+                return
+            s = _format(v)
+            if s and s.lower() not in seen_lower:
+                seen_lower.add(s.lower())
+                seen.append(s)
+
+        r = row - 1
+        while r >= 0 and _format(self._cell_value(r, col)) != "":
+            consider(r)
+            r -= 1
+        r = row + 1
+        while r < self.rowCount() and _format(self._cell_value(r, col)) != "":
+            consider(r)
+            r += 1
+        return seen
+
     # ------------------------------------------------------------ kích thước
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._data)
