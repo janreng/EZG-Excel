@@ -261,6 +261,18 @@ class SpreadsheetView(QTableView):
         right = max(r.right() for r in sel)
         return (top, left, bottom, right)
 
+    def _selection_ranges(self) -> list[tuple[int, int, int, int]]:
+        """Danh sách các vùng chọn rời (Ctrl+Click). Mỗi item là 1 bounding box
+        của 1 range — duyệt theo range nên nhẹ kể cả khi chọn cả cột/hàng."""
+        sm = self.selectionModel()
+        sel = sm.selection() if sm else None
+        if not sel or sel.isEmpty():
+            idx = self.currentIndex()
+            if not idx.isValid():
+                return []
+            return [(idx.row(), idx.column(), idx.row(), idx.column())]
+        return [(r.top(), r.left(), r.bottom(), r.right()) for r in sel]
+
     def _box_rect(self, box: tuple[int, int, int, int]) -> QRect:
         top, left, bottom, right = box
         tl = self.visualRect(self.model().index(top, left))
@@ -268,10 +280,12 @@ class SpreadsheetView(QTableView):
         return tl.united(br)
 
     def _handle_center(self):
-        box = self._selection_box()
-        if box is None:
+        # Núm kéo (Fill Handle) chỉ hiện khi chọn DUY NHẤT 1 vùng — đúng Excel:
+        # chọn nhiều vùng rời thì không có núm kéo.
+        ranges = self._selection_ranges()
+        if len(ranges) != 1:
             return None
-        rect = self._box_rect(box)
+        rect = self._box_rect(ranges[0])
         return rect.bottomRight()
 
     def _handle_rect(self) -> QRect | None:
@@ -537,33 +551,42 @@ class SpreadsheetView(QTableView):
     # ------------------------------------------------------------ vẽ phủ
     def paintEvent(self, event):
         super().paintEvent(event)
-        box = self._dst if (self._filling and self._dst) else self._selection_box()
-        if box is None:
+        # Đang kéo AutoFill -> vẽ riêng vùng đích (1 box). Bình thường -> vẽ TỪNG
+        # vùng chọn rời (Ctrl+Click) chứ không gộp thành 1 bounding box.
+        if self._filling and self._dst:
+            boxes = [self._dst]
+        else:
+            boxes = self._selection_ranges()
+        if not boxes:
             return
         painter = QPainter(self.viewport())
         painter.setRenderHint(QPainter.Antialiasing)
-        rect = self._box_rect(box).adjusted(0, 0, -1, -1)
-
-        # Lớp phủ xanh trong suốt lên vùng chọn (vẫn thấy nội dung bên dưới),
-        # chừa ô đang chọn để nó nổi bật như Google Sheets.
         cur = self.currentIndex()
-        if cur.isValid() and box[0] <= cur.row() <= box[2] and box[1] <= cur.column() <= box[3]:
-            region = QRegion(rect) - QRegion(self.visualRect(cur))
-            painter.setClipRegion(region)
-            painter.fillRect(rect, _WASH)
-            painter.setClipping(False)
-        else:
-            painter.fillRect(rect, _WASH)
-
-        # Viền xanh quanh vùng chọn.
         style = Qt.DashLine if self._filling else Qt.SolidLine
-        painter.setPen(QPen(_BLUE, 2, style))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawRect(rect)
+        vp = self.viewport().rect()
+        for box in boxes:
+            rect = self._box_rect(box).adjusted(0, 0, -1, -1)
+            # Vùng cuộn khuất hẳn -> bỏ qua (visualRect trả rect rỗng ở gốc toạ độ,
+            # united dễ tạo hình chữ nhật rởm chạy từ (0,0) -> vẽ lem góc trên-trái).
+            if not rect.intersects(vp):
+                continue
+            # Lớp phủ xanh trong suốt (vẫn thấy nội dung), chừa ô đang chọn để
+            # nó nổi bật như Google Sheets.
+            if (cur.isValid() and box[0] <= cur.row() <= box[2]
+                    and box[1] <= cur.column() <= box[3]):
+                region = QRegion(rect) - QRegion(self.visualRect(cur))
+                painter.setClipRegion(region)
+                painter.fillRect(rect, _WASH)
+                painter.setClipping(False)
+            else:
+                painter.fillRect(rect, _WASH)
+            painter.setPen(QPen(_BLUE, 2, style))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(rect)
 
-        # Núm kéo: chấm vuông xanh Excel ở góc dưới-phải (ẩn khi đang kéo).
-        if not self._filling:
-            center = rect.bottomRight()
+        # Núm kéo: chấm vuông xanh Excel ở góc dưới-phải — chỉ khi 1 vùng & không kéo.
+        if not self._filling and len(boxes) == 1:
+            center = self._box_rect(boxes[0]).adjusted(0, 0, -1, -1).bottomRight()
             painter.setPen(Qt.NoPen)
             painter.setBrush(_BLUE)
             painter.drawRect(center.x() - 3, center.y() - 3, 6, 6)

@@ -6,6 +6,14 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.10] - 2026-06-03
+
+### Thêm mới
+- **Chọn nhiều vùng rời (Ctrl+Click)**: giữ **Ctrl** rồi bấm hoặc kéo để chọn thêm
+  những ô/vùng không liền nhau, giống Excel. Mỗi vùng được tô sáng riêng. Thống kê
+  ở thanh trạng thái và các thao tác định dạng (in đậm, màu, viền), xóa nội dung
+  đều áp cho tất cả vùng đang chọn.
+
 ## [0.12.9] - 2026-06-03
 
 ### Thêm mới

@@ -466,22 +466,33 @@ class SpreadsheetModel(QAbstractTableModel):
     # ------------------------------------------------------------ định dạng
     def set_format(self, box: tuple[int, int, int, int], **attrs) -> None:
         """Đặt thuộc tính định dạng cho mọi ô trong vùng. ``None`` để xóa."""
+        self.set_format_ranges([box], **attrs)
+
+    def set_format_ranges(self, boxes, **attrs) -> None:
+        """Như :meth:`set_format` nhưng cho nhiều vùng rời (Ctrl+Click) trong MỘT
+        bước undo. Các vùng rời nhau nên không đụng key ô nào."""
         attrs = {k: v for k, v in attrs.items() if k in _FORMAT_KEYS}
         if not attrs:
             return
-        top, left, bottom, right = box
         cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
-        for r in range(top, bottom + 1):
-            for c in range(left, right + 1):
-                old_fmt = dict(self._fmt.get((r, c), {}))
-                new_fmt = dict(old_fmt)
-                for k, v in attrs.items():
-                    if v is None:
-                        new_fmt.pop(k, None)
-                    else:
-                        new_fmt[k] = v
-                if new_fmt != old_fmt:
-                    cell_fmts[(r, c)] = (old_fmt, new_fmt)
+        for (top, left, bottom, right) in boxes:
+            for r in range(top, bottom + 1):
+                for c in range(left, right + 1):
+                    old_fmt = dict(self._fmt.get((r, c), {}))
+                    new_fmt = dict(old_fmt)
+                    for k, v in attrs.items():
+                        if v is None:
+                            new_fmt.pop(k, None)
+                        else:
+                            new_fmt[k] = v
+                    if new_fmt != old_fmt:
+                        cell_fmts[(r, c)] = (old_fmt, new_fmt)
+        self._apply_fmt_changes(cell_fmts)
+
+    def _apply_fmt_changes(
+        self, cell_fmts: dict[tuple[int, int], tuple[dict, dict]]
+    ) -> None:
+        """Đẩy undo + áp định dạng + báo dataChanged cho tập ô đã đổi."""
         if not cell_fmts:
             return
         self._push_undo(("fmt", cell_fmts))
@@ -490,8 +501,10 @@ class SpreadsheetModel(QAbstractTableModel):
                 self._fmt[(r, c)] = new_fmt
             else:
                 self._fmt.pop((r, c), None)
+        rs = [r for r, _ in cell_fmts]
+        cs = [c for _, c in cell_fmts]
         self.dataChanged.emit(
-            self.index(top, left), self.index(bottom, right), []
+            self.index(min(rs), min(cs)), self.index(max(rs), max(cs)), []
         )
 
     def set_border(self, box: tuple[int, int, int, int], kind: str,
@@ -501,46 +514,43 @@ class SpreadsheetModel(QAbstractTableModel):
         Viền lưu trong fmt['border'] = {side: color_hex}. Mỗi ô chỉ nhận cạnh
         phù hợp với vị trí của nó trong vùng (vd 'outer' chỉ viền mép ngoài).
         """
-        top, left, bottom, right = box
+        self.set_border_ranges([box], kind, color)
+
+    def set_border_ranges(self, boxes, kind: str, color: str = "#000000") -> None:
+        """Như :meth:`set_border` nhưng cho nhiều vùng rời, gộp 1 bước undo.
+        Mỗi vùng tự tính mép ngoài của riêng nó (outer/top/bottom...)."""
         cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
-        for r in range(top, bottom + 1):
-            for c in range(left, right + 1):
-                old = dict(self._fmt.get((r, c), {}))
-                new = dict(old)
-                b = dict(new.get("border") or {})
-                if kind == "none":
-                    b = {}
-                elif kind == "all":
-                    b = {s: color for s in ("top", "bottom", "left", "right")}
-                elif kind == "outer":
-                    if r == top:
-                        b["top"] = color
-                    if r == bottom:
-                        b["bottom"] = color
-                    if c == left:
-                        b["left"] = color
-                    if c == right:
-                        b["right"] = color
-                elif kind in ("top", "bottom", "left", "right"):
-                    edge = {"top": r == top, "bottom": r == bottom,
-                            "left": c == left, "right": c == right}[kind]
-                    if edge:
-                        b[kind] = color
-                if b:
-                    new["border"] = b
-                else:
-                    new.pop("border", None)
-                if new != old:
-                    cell_fmts[(r, c)] = (old, new)
-        if not cell_fmts:
-            return
-        self._push_undo(("fmt", cell_fmts))
-        for (r, c), (_, new_fmt) in cell_fmts.items():
-            if new_fmt:
-                self._fmt[(r, c)] = new_fmt
-            else:
-                self._fmt.pop((r, c), None)
-        self.dataChanged.emit(self.index(top, left), self.index(bottom, right), [])
+        for (top, left, bottom, right) in boxes:
+            for r in range(top, bottom + 1):
+                for c in range(left, right + 1):
+                    old = dict(self._fmt.get((r, c), {}))
+                    new = dict(old)
+                    b = dict(new.get("border") or {})
+                    if kind == "none":
+                        b = {}
+                    elif kind == "all":
+                        b = {s: color for s in ("top", "bottom", "left", "right")}
+                    elif kind == "outer":
+                        if r == top:
+                            b["top"] = color
+                        if r == bottom:
+                            b["bottom"] = color
+                        if c == left:
+                            b["left"] = color
+                        if c == right:
+                            b["right"] = color
+                    elif kind in ("top", "bottom", "left", "right"):
+                        edge = {"top": r == top, "bottom": r == bottom,
+                                "left": c == left, "right": c == right}[kind]
+                        if edge:
+                            b[kind] = color
+                    if b:
+                        new["border"] = b
+                    else:
+                        new.pop("border", None)
+                    if new != old:
+                        cell_fmts[(r, c)] = (old, new)
+        self._apply_fmt_changes(cell_fmts)
 
     def get_format(self, row: int, col: int) -> dict:
         """Định dạng của một ô (rỗng nếu mặc định)."""
@@ -560,12 +570,11 @@ class SpreadsheetModel(QAbstractTableModel):
                 return (t, l, b, r)
         return None
 
-    def merge_cells(self, box: tuple[int, int, int, int]) -> None:
-        """Gộp vùng thành một ô. Giữ nội dung ô góc trên-trái, xóa phần còn lại."""
+    def _merge_box(self, box: tuple[int, int, int, int]) -> bool:
+        """Gộp 1 vùng (KHÔNG đẩy undo). Trả True nếu có thay đổi."""
         top, left, bottom, right = box
         if top == bottom and left == right:
-            return  # một ô thì không cần gộp
-        self._push_undo(self._full_snapshot())
+            return False  # một ô thì không cần gộp
         # Bỏ các vùng gộp cũ giao với vùng mới.
         self._merges = [m for m in self._merges if not _boxes_overlap(m, box)]
         # Xóa nội dung mọi ô trừ ô góc trên-trái.
@@ -577,23 +586,53 @@ class SpreadsheetModel(QAbstractTableModel):
         self._eval_cache.clear()
         self._rebuild_deps()
         self.dataChanged.emit(self.index(top, left), self.index(bottom, right), [])
-        self.mergesChanged.emit()
+        return True
+
+    def _unmerge_box(self, box: tuple[int, int, int, int]) -> bool:
+        """Bỏ gộp mọi vùng giao với box (KHÔNG đẩy undo). Trả True nếu có đổi."""
+        hit = [m for m in self._merges if _boxes_overlap(m, box)]
+        if not hit:
+            return False
+        self._merges = [m for m in self._merges if m not in hit]
+        return True
+
+    def merge_cells(self, box: tuple[int, int, int, int]) -> None:
+        """Gộp vùng thành một ô. Giữ nội dung ô góc trên-trái, xóa phần còn lại."""
+        snapshot = self._full_snapshot()
+        if self._merge_box(box):
+            self._push_undo(snapshot)
+            self.mergesChanged.emit()
 
     def unmerge_cells(self, box: tuple[int, int, int, int]) -> None:
         """Bỏ gộp mọi vùng giao với box."""
-        hit = [m for m in self._merges if _boxes_overlap(m, box)]
-        if not hit:
-            return
-        self._push_undo(self._full_snapshot())
-        self._merges = [m for m in self._merges if m not in hit]
-        self.mergesChanged.emit()
+        snapshot = self._full_snapshot()
+        if self._unmerge_box(box):
+            self._push_undo(snapshot)
+            self.mergesChanged.emit()
 
     def toggle_merge(self, box: tuple[int, int, int, int]) -> None:
         """Nếu vùng đã có ô gộp thì bỏ gộp, ngược lại thì gộp."""
-        if any(_boxes_overlap(m, box) for m in self._merges):
-            self.unmerge_cells(box)
-        else:
-            self.merge_cells(box)
+        self.toggle_merge_ranges([box])
+
+    def toggle_merge_ranges(self, boxes) -> None:
+        """Gộp/bỏ gộp NHIỀU vùng rời trong MỘT bước undo, với hành động NHẤT QUÁN
+        cho mọi vùng (như Excel): nếu bất kỳ vùng nào đang gộp -> bỏ gộp tất cả;
+        ngược lại -> gộp tất cả."""
+        if not boxes:
+            return
+        any_merged = any(
+            _boxes_overlap(m, b) for b in boxes for m in self._merges
+        )
+        snapshot = self._full_snapshot()
+        changed = False
+        for box in boxes:
+            if any_merged:
+                changed = self._unmerge_box(box) or changed
+            else:
+                changed = self._merge_box(box) or changed
+        if changed:
+            self._push_undo(snapshot)
+            self.mergesChanged.emit()
 
     # ------------------------------------------------------------ định dạng có điều kiện
     def cond_rules(self) -> list[dict]:
@@ -718,9 +757,13 @@ class SpreadsheetModel(QAbstractTableModel):
         ]
 
     def clear_range(self, box: tuple[int, int, int, int]) -> None:
-        top, left, bottom, right = box
+        self.clear_ranges([box])
+
+    def clear_ranges(self, boxes) -> None:
+        """Xóa nội dung nhiều vùng rời (Ctrl+Click) trong MỘT bước undo."""
         changes = [
             (r, c, self._data[r][c], "")
+            for (top, left, bottom, right) in boxes
             for r in range(top, bottom + 1)
             for c in range(left, right + 1)
             if self._data[r][c] != ""

@@ -110,6 +110,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "copied": {"vi": "Đã sao chép", "en": "Copied"},
     "cut_done": {"vi": "Đã cắt", "en": "Cut"},
     "pasted": {"vi": "Đã dán", "en": "Pasted"},
+    "multi_range_copy": {
+        "vi": "Không thể dùng lệnh này cho nhiều vùng chọn.",
+        "en": "That command cannot be used on multiple selections.",
+    },
     "nothing_undo": {"vi": "Không có gì để hoàn tác", "en": "Nothing to undo"},
     "nothing_redo": {"vi": "Không có gì để làm lại", "en": "Nothing to redo"},
     "not_found": {"vi": "Không tìm thấy", "en": "Not found"},

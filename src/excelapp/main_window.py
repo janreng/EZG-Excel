@@ -329,7 +329,8 @@ class MainWindow(QMainWindow):
         self.view.setModel(self.model)
         self.model.mergesChanged.connect(self.view.refresh_spans)
         self.view.refresh_spans()
-        self.view.setSelectionMode(QTableView.ContiguousSelection)
+        # ExtendedSelection: kéo = 1 vùng, Ctrl+Click = thêm vùng rời, Shift = mở rộng (như Excel).
+        self.view.setSelectionMode(QTableView.ExtendedSelection)
         self.view.horizontalHeader().setSectionsClickable(True)
         self.view.verticalHeader().setSectionsClickable(True)
         self.view.horizontalHeader().sectionDoubleClicked.connect(self._sort_by_header)
@@ -701,16 +702,14 @@ class MainWindow(QMainWindow):
             self._apply_format(**{key: color.name()})
 
     def _apply_border(self, kind: str) -> None:
-        box = self._selection_box()
-        if box is None:
+        boxes = self._selection_ranges()
+        if not boxes:
             return
-        self.model.set_border(box, kind)
+        self.model.set_border_ranges(boxes, kind)
 
     def _toggle_merge(self) -> None:
-        box = self._selection_box()
-        if box is None:
-            return
-        self.model.toggle_merge(box)
+        # Gộp/bỏ gộp mọi vùng rời nhất quán trong 1 bước undo (như Excel).
+        self.model.toggle_merge_ranges(self._selection_ranges())
 
     def _clear_conditional(self) -> None:
         self.model.clear_cond_rules(self._selection_box())
@@ -814,13 +813,14 @@ class MainWindow(QMainWindow):
     def _apply_format(self, **attrs) -> None:
         if self._updating_toolbar:
             return  # đang đồng bộ trạng thái nút, không áp dụng
-        box = self._selection_box()
-        if box is None:
+        boxes = self._selection_ranges()
+        if not boxes:
             return
-        self.model.set_format(box, **attrs)
+        self.model.set_format_ranges(boxes, **attrs)
         if "wrap" in attrs:
-            for r in range(box[0], box[2] + 1):
-                self.view.resizeRowToContents(r)
+            for box in boxes:
+                for r in range(box[0], box[2] + 1):
+                    self.view.resizeRowToContents(r)
 
     def _build_menu(self) -> None:
         menubar = self.menuBar()
@@ -1123,8 +1123,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------ menu chuột phải
     def _show_context_menu(self, pos) -> None:
         index = self.view.indexAt(pos)
-        # Nếu bấm vào ô ngoài vùng chọn -> chọn ô đó trước.
-        if index.isValid() and index not in self.view.selectionModel().selectedIndexes():
+        # Nếu bấm vào ô ngoài vùng chọn -> chọn ô đó trước. Dùng selection().contains()
+        # (theo range) thay vì selectedIndexes() để khỏi liệt kê hàng vạn ô khi chọn cả cột.
+        if index.isValid() and not self.view.selectionModel().selection().contains(index):
             self.view.setCurrentIndex(index)
 
         menu = QMenu(self)
@@ -1564,21 +1565,41 @@ class MainWindow(QMainWindow):
         right = max(r.right() for r in sel)
         return (top, left, bottom, right)
 
+    def _selection_ranges(self):
+        """Danh sách bounding box của TỪNG vùng chọn rời (Ctrl+Click).
+
+        Dùng cho thao tác áp được lên nhiều vùng (định dạng, viền, xóa nội dung).
+        Duyệt theo range nên nhẹ kể cả khi chọn cả cột/hàng."""
+        sel = self.view.selectionModel().selection()
+        if sel.isEmpty():
+            idx = self.view.currentIndex()
+            if not idx.isValid():
+                return []
+            return [(idx.row(), idx.column(), idx.row(), idx.column())]
+        return [(r.top(), r.left(), r.bottom(), r.right()) for r in sel]
+
     def fill_down(self) -> None:
-        box = self._selection_box()
-        if box is None:
+        # Điền chỉ áp cho 1 vùng liền (đa vùng rời không có nghĩa cho fill).
+        ranges = self._selection_ranges()
+        if self._reject_fill_multi(ranges):
             return
-        top, left, bottom, right = box
+        top, left, bottom, right = ranges[0]
         if bottom > top:
-            self.model.fill((top, left, top, right), box)
+            self.model.fill((top, left, top, right), ranges[0])
 
     def fill_right(self) -> None:
-        box = self._selection_box()
-        if box is None:
+        ranges = self._selection_ranges()
+        if self._reject_fill_multi(ranges):
             return
-        top, left, bottom, right = box
+        top, left, bottom, right = ranges[0]
         if right > left:
-            self.model.fill((top, left, bottom, left), box)
+            self.model.fill((top, left, bottom, left), ranges[0])
+
+    def _reject_fill_multi(self, ranges) -> bool:
+        """True nếu không thể fill (0 vùng, hoặc nhiều vùng rời -> báo như Excel)."""
+        if len(ranges) > 1:
+            self.statusBar().showMessage(tr("multi_range_copy"), 3000)
+        return len(ranges) != 1
 
     # ------------------------------------------------------------ undo / redo
     def undo(self) -> None:
@@ -1591,6 +1612,10 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------ copy / cut / paste
     def copy_selection(self, *, cut: bool = False) -> None:
+        # Excel chặn sao chép/cắt khi chọn nhiều vùng rời -> báo đúng kiểu Excel.
+        if len(self._selection_ranges()) > 1:
+            QMessageBox.warning(self, APP_NAME, tr("multi_range_copy"))
+            return
         box = self._selection_box()
         if box is None:
             return
@@ -1655,9 +1680,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("pasted"), 2000)
 
     def clear_selection(self) -> None:
-        box = self._selection_box()
-        if box is not None:
-            self.model.clear_range(box)
+        boxes = self._selection_ranges()
+        if boxes:
+            self.model.clear_ranges(boxes)
 
     # ------------------------------------------------------------ tìm & thay thế
     def show_find(self) -> None:
