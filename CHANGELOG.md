@@ -6,6 +6,12 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.6] - 2026-06-03
+
+### Thay đổi
+- **Bộ icon mới sắc nét** cho thanh công cụ (theo bộ Lucide) — thay icon cũ bị
+  mờ, nhìn hiện đại và rõ nét hơn trên mọi màn hình.
+
 ## [0.12.5] - 2026-06-03
 
 ### Thêm mới
