@@ -6,6 +6,16 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.15.0] - 2026-06-03
+
+### Thêm mới
+- **Nhóm gập dòng & cột (Outline)**: chọn dòng/cột rồi **Nhóm** lại để có thể
+  **gập / mở** ẩn-hiện cả cụm bằng một thao tác; **Bỏ nhóm** khi không cần.
+  - Trong menu **Cấu trúc → Nhóm (Outline)**; phím tắt **Alt+Shift+→** nhóm dòng,
+    **Alt+Shift+←** bỏ nhóm.
+  - Trạng thái ẩn (do nhóm gập, tự ẩn, hay bộ lọc) nay phối hợp đúng với nhau và
+    **lưu riêng cho từng sheet**.
+
 ## [0.14.2] - 2026-06-03
 
 ### Thêm mới

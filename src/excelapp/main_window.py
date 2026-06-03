@@ -57,6 +57,7 @@ from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .format_dialog import FormatCellsDialog
 from .freeze import FreezeManager
+from .outline import OutlineModel
 from .paste_dialog import PasteSpecialDialog
 from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
@@ -170,7 +171,8 @@ class _RibbonBar(QWidget):
 class _Sheet:
     """Một sheet trong workbook: model dữ liệu + state UI riêng (lọc, freeze)."""
 
-    __slots__ = ("model", "name", "filters", "freeze_rows", "freeze_cols")
+    __slots__ = ("model", "name", "filters", "freeze_rows", "freeze_cols",
+                 "hidden_rows", "hidden_cols", "outline")
 
     def __init__(self, model, name: str, filters: dict | None = None):
         self.model = model
@@ -178,6 +180,9 @@ class _Sheet:
         self.filters = filters if filters is not None else {}
         self.freeze_rows = 0
         self.freeze_cols = 0
+        self.hidden_rows: set[int] = set()   # dòng tự ẩn (riêng từng sheet)
+        self.hidden_cols: set[int] = set()   # cột tự ẩn
+        self.outline = OutlineModel()        # nhóm gập (riêng từng sheet)
 
 
 class MainWindow(QMainWindow):
@@ -196,6 +201,8 @@ class MainWindow(QMainWindow):
         self._stat_items = self._load_stat_items()  # Spec 11.2 — item nào hiện ở status bar
         self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
         self._manual_hidden_rows: set[int] = set()  # dòng người dùng tự ẩn (giữ qua sort/lọc)
+        self._manual_hidden_cols: set[int] = set()  # cột người dùng tự ẩn
+        self._outline = OutlineModel()              # nhóm gập dòng/cột
 
         if os.path.exists(icon_path()):
             self.setWindowIcon(QIcon(icon_path()))
@@ -403,6 +410,10 @@ class MainWindow(QMainWindow):
         # Khởi tạo workbook với một sheet (model đã tạo ở __init__).
         self.sheets: list[_Sheet] = [_Sheet(self.model, "Sheet1", self._filters)]
         self._active = 0
+        # Neo state ẩn/nhóm của MainWindow vào sheet đầu (mỗi sheet giữ riêng).
+        self._manual_hidden_rows = self.sheets[0].hidden_rows
+        self._manual_hidden_cols = self.sheets[0].hidden_cols
+        self._outline = self.sheets[0].outline
         self.sheet_tabs.blockSignals(True)
         self.sheet_tabs.addTab("Sheet1")
         self.sheet_tabs.blockSignals(False)
@@ -904,6 +915,17 @@ class MainWindow(QMainWindow):
         struct_menu.addSeparator()
         self._add_action(struct_menu, tr("autofit_col"), self.autofit_cols)
         self._add_action(struct_menu, tr("autofit_row"), self.autofit_rows)
+        outline_menu = struct_menu.addMenu(tr("outline_menu"))
+        outline_menu.setStyleSheet(MENU_QSS)
+        self._add_action(outline_menu, tr("group_rows"), self.group_rows,
+                         QKeySequence("Alt+Shift+Right"))
+        self._add_action(outline_menu, tr("group_cols"), self.group_cols)
+        self._add_action(outline_menu, tr("ungroup_rows"), self.ungroup_rows,
+                         QKeySequence("Alt+Shift+Left"))
+        self._add_action(outline_menu, tr("ungroup_cols"), self.ungroup_cols)
+        outline_menu.addSeparator()
+        self._add_action(outline_menu, tr("toggle_group_rows"), self.toggle_group_rows)
+        self._add_action(outline_menu, tr("toggle_group_cols"), self.toggle_group_cols)
 
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
@@ -1022,12 +1044,16 @@ class MainWindow(QMainWindow):
         sheet = self.sheets[i]
         self.model = sheet.model
         self._filters = sheet.filters
+        self._manual_hidden_rows = sheet.hidden_rows
+        self._manual_hidden_cols = sheet.hidden_cols
+        self._outline = sheet.outline
         self.view.setModel(self.model)
         self._wire_selection()
         self.freeze.rebind()
         self.freeze.set_freeze(sheet.freeze_rows, sheet.freeze_cols)
         self.view.refresh_spans()
         self._apply_filters()
+        self._apply_col_visibility()
         self.view.horizontalHeader().refresh(set(self._filters.keys()))
         self.view.setCurrentIndex(self.model.index(0, 0))
         self._sync_show_formulas_check()  # đồng bộ tick "Hiện công thức" theo sheet mới
@@ -1606,28 +1632,78 @@ class MainWindow(QMainWindow):
             cols.update(range(left, right + 1))
         return rows, cols
 
+    # ------------------------------------------------------------ hiển thị dòng/cột (gộp 1 chỗ)
+    def _row_passes_filter(self, r: int) -> bool:
+        return all(
+            str(self.model.data(self.model.index(r, col), Qt.DisplayRole) or "") in allowed
+            for col, allowed in self._filters.items()
+        )
+
+    def _apply_row_visibility(self) -> None:
+        """Một dòng bị ẩn nếu: tự ẩn, không qua bộ lọc, hoặc nằm trong nhóm đang gập."""
+        for r in range(self.model.rowCount()):
+            hidden = (r in self._manual_hidden_rows
+                      or not self._row_passes_filter(r)
+                      or self._outline.is_collapsed("row", r))
+            self.view.setRowHidden(r, hidden)
+        self.view.viewport().update()
+
+    def _apply_col_visibility(self) -> None:
+        """Một cột bị ẩn nếu: tự ẩn hoặc nằm trong nhóm cột đang gập."""
+        for c in range(self.model.columnCount()):
+            hidden = (c in self._manual_hidden_cols
+                      or self._outline.is_collapsed("col", c))
+            self.view.setColumnHidden(c, hidden)
+        self.view.viewport().update()
+
     def hide_rows(self) -> None:
         rows, _ = self._selected_rows_cols()
-        for r in rows:
-            self._manual_hidden_rows.add(r)
-            self.view.setRowHidden(r, True)
-        self.view.viewport().update()
+        self._manual_hidden_rows.update(rows)
+        self._apply_row_visibility()
 
     def hide_cols(self) -> None:
         _, cols = self._selected_rows_cols()
-        for c in cols:
-            self.view.setColumnHidden(c, True)
-        self.view.viewport().update()
+        self._manual_hidden_cols.update(cols)
+        self._apply_col_visibility()
 
     def unhide_selection(self) -> None:
-        """Hiện lại mọi dòng/cột đang ẩn nằm trong vùng chọn (kể cả khoảng giữa)."""
+        """Hiện lại dòng/cột tự-ẩn trong vùng chọn (kể cả khoảng giữa)."""
         rows, cols = self._selected_rows_cols()
-        for r in rows:
-            self._manual_hidden_rows.discard(r)
-            self.view.setRowHidden(r, False)
-        for c in cols:
-            self.view.setColumnHidden(c, False)
-        self.view.viewport().update()
+        self._manual_hidden_rows.difference_update(rows)
+        self._manual_hidden_cols.difference_update(cols)
+        self._apply_row_visibility()
+        self._apply_col_visibility()
+
+    # ------------------------------------------------------------ nhóm gập (outline)
+    def group_rows(self) -> None:
+        rows, _ = self._selected_rows_cols()
+        if rows and self._outline.add("row", min(rows), max(rows)):
+            self._apply_row_visibility()
+
+    def group_cols(self) -> None:
+        _, cols = self._selected_rows_cols()
+        if cols and self._outline.add("col", min(cols), max(cols)):
+            self._apply_col_visibility()
+
+    def ungroup_rows(self) -> None:
+        rows, _ = self._selected_rows_cols()
+        if rows and self._outline.remove_overlapping("row", min(rows), max(rows)):
+            self._apply_row_visibility()
+
+    def ungroup_cols(self) -> None:
+        _, cols = self._selected_rows_cols()
+        if cols and self._outline.remove_overlapping("col", min(cols), max(cols)):
+            self._apply_col_visibility()
+
+    def toggle_group_rows(self) -> None:
+        rows, _ = self._selected_rows_cols()
+        if rows and self._outline.toggle_overlapping("row", min(rows), max(rows)):
+            self._apply_row_visibility()
+
+    def toggle_group_cols(self) -> None:
+        _, cols = self._selected_rows_cols()
+        if cols and self._outline.toggle_overlapping("col", min(cols), max(cols)):
+            self._apply_col_visibility()
 
     def autofit_cols(self) -> None:
         """Dãn cột vừa nội dung cho các cột đang chọn."""
@@ -1970,7 +2046,7 @@ class MainWindow(QMainWindow):
         self.view.horizontalHeader().set_filter_enabled(on)
         if not on:
             self._filters.clear()
-            self._unhide_all()
+            self._apply_row_visibility()
             self.view.horizontalHeader().refresh(set())
 
     def show_filter(self) -> None:
@@ -2078,27 +2154,14 @@ class MainWindow(QMainWindow):
         return [(k, k) for k in keys]
 
     def _apply_filters(self) -> None:
-        """Ẩn các dòng không khớp mọi bộ lọc đang bật."""
-        for r in range(self.model.rowCount()):
-            visible = all(
-                str(self.model.data(self.model.index(r, col), Qt.DisplayRole) or "") in allowed
-                for col, allowed in self._filters.items()
-            )
-            # Giữ dòng người dùng tự ẩn — không bị sort/lọc làm hiện lại.
-            self.view.setRowHidden(r, (not visible) or r in self._manual_hidden_rows)
+        """Áp lại hiển thị dòng (lọc + tự ẩn + nhóm gập) rồi làm mới icon phễu."""
+        self._apply_row_visibility()
         self.view.horizontalHeader().refresh(set(self._filters.keys()))
-        self.view.viewport().update()
-
-    def _unhide_all(self) -> None:
-        # Bỏ ẩn do lọc, nhưng giữ những dòng người dùng tự ẩn.
-        for r in range(self.model.rowCount()):
-            self.view.setRowHidden(r, r in self._manual_hidden_rows)
-        self.view.viewport().update()
 
     def clear_filters(self) -> None:
-        """Xóa tiêu chí lọc, hiện lại mọi dòng (giữ chế độ lọc đang bật)."""
+        """Xóa tiêu chí lọc (vẫn giữ dòng tự ẩn & nhóm gập)."""
         self._filters.clear()
-        self._unhide_all()
+        self._apply_row_visibility()
         self.view.horizontalHeader().refresh(set())
 
     # ------------------------------------------------------------ sắp xếp

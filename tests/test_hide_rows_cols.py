@@ -64,10 +64,10 @@ def test_manual_hide_survives_filter_reapply(win):
     assert win.view.isRowHidden(2)      # van an
 
 
-def test_manual_hide_survives_unhide_all(win):
+def test_manual_hide_survives_clear_filters(win):
     _select(win, (2, 0, 2, 0))
     win.hide_rows()
-    win._unhide_all()                   # clear_filters goi cai nay
+    win.clear_filters()                 # xoa loc nhung giu dong tu an
     assert win.view.isRowHidden(2)      # tu an -> van giu
 
 

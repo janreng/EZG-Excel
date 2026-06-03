@@ -41,6 +41,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "unhide": {"vi": "Hiện lại (trong vùng chọn)", "en": "Unhide (in selection)"},
     "autofit_col": {"vi": "Dãn cột vừa nội dung", "en": "Auto-fit column width"},
     "autofit_row": {"vi": "Dãn dòng vừa nội dung", "en": "Auto-fit row height"},
+    "outline_menu": {"vi": "Nhóm (Outline)", "en": "Group (Outline)"},
+    "group_rows": {"vi": "Nhóm dòng", "en": "Group rows"},
+    "group_cols": {"vi": "Nhóm cột", "en": "Group columns"},
+    "ungroup_rows": {"vi": "Bỏ nhóm dòng", "en": "Ungroup rows"},
+    "ungroup_cols": {"vi": "Bỏ nhóm cột", "en": "Ungroup columns"},
+    "toggle_group_rows": {"vi": "Gập / mở nhóm dòng", "en": "Collapse / expand rows"},
+    "toggle_group_cols": {"vi": "Gập / mở nhóm cột", "en": "Collapse / expand columns"},
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
