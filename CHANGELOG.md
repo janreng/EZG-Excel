@@ -6,6 +6,16 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.14.0] - 2026-06-03
+
+### Thêm mới
+- **Dán đặc biệt (Ctrl+Alt+V)** với hộp thoại chọn cách dán:
+  - **Dán**: Tất cả / Công thức / Giá trị (kết quả đã tính) / Định dạng.
+  - **Phép tính**: Cộng / Trừ / Nhân / Chia giá trị nguồn vào ô đích.
+  - **Bỏ qua ô trống**: không ghi đè ô đích khi ô nguồn trống.
+  - **Xoay hàng / cột** (transpose).
+  - Dán xong là **một bước hoàn tác (Ctrl+Z)**.
+
 ## [0.13.0] - 2026-06-03
 
 ### Thêm mới

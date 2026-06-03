@@ -19,7 +19,7 @@ DEFAULTS: dict[str, str] = {
     "copy": "Ctrl+C",
     "cut": "Ctrl+X",
     "paste": "Ctrl+V",
-    "paste_special": "Ctrl+Shift+V",
+    "paste_special": "Ctrl+Alt+V",
     "clear": "Del",
     "fill_down": "Ctrl+D",
     "fill_right": "Ctrl+R",

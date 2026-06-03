@@ -2,7 +2,7 @@
 ; Compile: build_installer.bat  (or open with Inno Setup Compiler).
 
 #define MyAppName "Ezcel"
-#define MyAppVersion "0.13.0"
+#define MyAppVersion "0.14.0"
 #define MyAppPublisher "EZG"
 #define MyAppExeName "Ezcel.exe"
 

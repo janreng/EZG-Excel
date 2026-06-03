@@ -57,6 +57,7 @@ from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .format_dialog import FormatCellsDialog
 from .freeze import FreezeManager
+from .paste_dialog import PasteSpecialDialog
 from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
 from .resources import icon_path
@@ -1652,6 +1653,8 @@ class MainWindow(QMainWindow):
         QApplication.clipboard().setText(tsv)
         self._clip = {
             "block": raw,
+            "values": self.model.block_values(box),   # kết quả đã tính (Dán đặc biệt > Giá trị)
+            "fmts": self.model.block_formats(box),     # định dạng nguồn (Dán đặc biệt > Định dạng)
             "anchor": (box[0], box[1]),
             "tsv": tsv,
             "adjust": not cut,  # cut = di chuyển, không dịch tham chiếu
@@ -1689,22 +1692,44 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("pasted"), 2000)
 
     def paste_special(self) -> None:
-        """Dán dạng văn bản thuần (chỉ giá trị, luôn lấy từ clipboard hệ thống)."""
+        """Dán đặc biệt (Ctrl+Alt+V): chọn dán phần nào + phép tính + xoay + bỏ ô trống."""
         idx = self.view.currentIndex()
         if not idx.isValid():
             return
-        text = QApplication.clipboard().text()
-        if not text:
-            return
         top, left = idx.row(), idx.column()
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        block = [line.split("\t") for line in normalized.split("\n")]
-        if block and block[-1] == [""]:
-            block.pop()
-        self.model.paste_block(top, left, block, src_anchor=None)
-        if block:
-            h, w = len(block), max(len(r) for r in block)
-            self.view.select_box((top, left, top + h - 1, left + w - 1))
+        clip_text = QApplication.clipboard().text()
+        internal = bool(self._clip and clip_text == self._clip["tsv"])
+
+        if internal:
+            raw = self._clip["block"]
+            values = self._clip["values"]
+            fmts = self._clip["fmts"]
+            anchor = self._clip["anchor"] if self._clip["adjust"] else None
+        elif clip_text:
+            normalized = clip_text.replace("\r\n", "\n").replace("\r", "\n")
+            raw = [line.split("\t") for line in normalized.split("\n")]
+            if raw and raw[-1] == [""]:
+                raw.pop()
+            values = raw                       # văn bản ngoài: giá trị = chính nó
+            fmts = [[{} for _ in r] for r in raw]   # không có định dạng nguồn
+            anchor = None
+        else:
+            return
+        if not raw:
+            return
+
+        dlg = PasteSpecialDialog(self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        opts = dlg.options()
+        self.model.paste_special(
+            top, left, raw, values, fmts, src_anchor=anchor, **opts
+        )
+        rows = len(raw)
+        cols = max(len(r) for r in raw)
+        if opts["transpose"]:
+            rows, cols = cols, rows
+        self.view.select_box((top, left, top + rows - 1, left + cols - 1))
         self.statusBar().showMessage(tr("pasted"), 2000)
 
     def clear_selection(self) -> None:

@@ -776,6 +776,114 @@ class SpreadsheetModel(QAbstractTableModel):
             for r in range(top, bottom + 1)
         ]
 
+    def block_values(self, box: tuple[int, int, int, int]) -> list[list[str]]:
+        """Giá trị ĐÃ TÍNH của vùng (công thức -> kết quả), dạng chuỗi gọn.
+        Dùng cho Dán đặc biệt > Giá trị."""
+        top, left, bottom, right = box
+        return [
+            [_format(self._cell_value(r, c)) for c in range(left, right + 1)]
+            for r in range(top, bottom + 1)
+        ]
+
+    def block_formats(self, box: tuple[int, int, int, int]) -> list[list[dict]]:
+        """Bản sao định dạng từng ô trong vùng. Dùng cho Dán đặc biệt > Định dạng."""
+        top, left, bottom, right = box
+        return [
+            [dict(self._fmt.get((r, c), {})) for c in range(left, right + 1)]
+            for r in range(top, bottom + 1)
+        ]
+
+    def paste_special(self, top: int, left: int, raw_block, value_block, fmt_block,
+                      *, mode: str = "all", operation: str = "none",
+                      skip_blanks: bool = False, transpose: bool = False,
+                      src_anchor=None) -> None:
+        """Dán đặc biệt từ ô (top,left).
+
+        mode: all / values / formulas / formats.
+        operation: none / add / sub / mul / div (tính giữa ô đích và giá trị nguồn).
+        skip_blanks: bỏ qua ô nguồn trống (không ghi đè đích).
+        transpose: xoay hàng <-> cột.
+
+        Dùng undo dạng snapshot để một lần dán (đổi cả dữ liệu lẫn định dạng,
+        kể cả khi lưới phải mở rộng) = một bước Ctrl+Z.
+        """
+        if not raw_block:
+            return
+        # Đệm hàng về cùng độ rộng (clipboard ngoài có thể lệch số cột) -> transpose
+        # không cắt cụt dữ liệu và vùng chọn lại sau khi dán đúng hình chữ nhật.
+        w = max(len(r) for r in raw_block)
+        raw_block = [list(r) + [""] * (w - len(r)) for r in raw_block]
+        value_block = [list(r) + [""] * (w - len(r)) for r in value_block]
+        fmt_block = [list(r) + [{}] * (w - len(r)) for r in fmt_block]
+        if transpose:
+            raw_block = [list(r) for r in zip(*raw_block)]
+            value_block = [list(r) for r in zip(*value_block)]
+            fmt_block = [list(r) for r in zip(*fmt_block)]
+        rows = len(raw_block)
+        cols = len(raw_block[0])
+
+        snapshot = self._full_snapshot()
+        grew = top + rows > self.rowCount() or left + cols > self.columnCount()
+        if grew:
+            self.beginResetModel()
+        self._grow_to(top + rows, left + cols)
+
+        touch_data = mode in ("all", "values", "formulas") or operation != "none"
+        touch_fmt = mode in ("all", "formats")
+        for i in range(rows):
+            for j in range(len(raw_block[i])):
+                r, c = top + i, left + j
+                raw, val = raw_block[i][j], value_block[i][j]
+                if skip_blanks and raw == "":
+                    continue
+                if touch_fmt:
+                    src_fmt = dict(fmt_block[i][j]) if i < len(fmt_block) and j < len(fmt_block[i]) else {}
+                    if src_fmt:
+                        self._fmt[(r, c)] = src_fmt
+                    else:
+                        self._fmt.pop((r, c), None)
+                if touch_data:
+                    self._data[r][c] = self._paste_cell_value(
+                        r, c, raw, val, mode, operation, src_anchor, top, left
+                    )
+
+        self._push_undo(snapshot)
+        self._eval_cache.clear()
+        self._rebuild_deps()
+        self._recalculate()
+        if grew:
+            self.endResetModel()
+        else:
+            self.dataChanged.emit(
+                self.index(top, left), self.index(top + rows - 1, left + cols - 1),
+                [Qt.DisplayRole, Qt.EditRole],
+            )
+
+    def _paste_cell_value(self, r, c, raw, val, mode, operation, src_anchor,
+                          top, left) -> str:
+        """Tính chuỗi dữ liệu cho 1 ô đích theo mode/operation của Dán đặc biệt.
+
+        operation != none -> ưu tiên phép tính số (bất kể mode), dùng giá trị
+        ĐÃ TÍNH của nguồn (val); không tính được thì dán nguyên val.
+        """
+        if operation != "none":
+            dst = self._cell_value(r, c)
+            src = _parse_number(val) if val != "" else None
+            dnum = dst if _looks_numeric(dst) else _parse_number(_format(dst))
+            if src is not None and dnum is not None:
+                if operation == "div" and src == 0:
+                    return "#DIV/0!"
+                ops = {"add": dnum + src, "sub": dnum - src,
+                       "mul": dnum * src, "div": dnum / src if src else 0}
+                return _format(ops[operation])
+            return val  # không tính được -> dán giá trị nguồn
+        if mode == "values":
+            return val
+        # all / formulas: giữ công thức, dịch tham chiếu tương đối nếu dán trong app.
+        if src_anchor and formula.is_formula(raw):
+            return formula.offset_formula(raw, top - src_anchor[0], left - src_anchor[1])
+        return raw
+
     def clear_range(self, box: tuple[int, int, int, int]) -> None:
         self.clear_ranges([box])
 
