@@ -63,6 +63,9 @@ class SpreadsheetModel(QAbstractTableModel):
         self._on_content_changed = None   # Callable[[], None]
         self._external_cells: set[tuple[int, int]] = set()  # ô có tham chiếu chéo sheet
         self._tables = None               # TableModel của sheet (để delegate tô sọc)
+        # Cache số liệu vùng cho quy tắc điều kiện theo-vùng (duplicate/top/avg):
+        # box -> (danh sách số, đếm theo chuỗi). Xóa mỗi khi giá trị ô đổi.
+        self._cond_cache: dict[tuple, tuple] = {}
         self._undo: list[tuple] = []
         self._redo: list[tuple] = []
         self._undo_limit = 100
@@ -144,8 +147,18 @@ class SpreadsheetModel(QAbstractTableModel):
     def _cond_match(self, row: int, col: int, rule: dict) -> bool:
         value = self._cell_value(row, col)
         op = rule["op"]
+        text = _format(value)
         if op == "contains":
-            return str(rule.get("v1", "")).lower() in _format(value).lower()
+            return str(rule.get("v1", "")).lower() in text.lower()
+        if op == "begins":
+            return text.lower().startswith(str(rule.get("v1", "")).lower())
+        if op == "ends":
+            return text.lower().endswith(str(rule.get("v1", "")).lower())
+        if op in ("duplicate", "unique"):
+            if text == "":
+                return False
+            cnt = self._cond_count_value(rule["box"], text)
+            return cnt > 1 if op == "duplicate" else cnt == 1
         try:
             num = float(value)
         except (TypeError, ValueError):
@@ -160,7 +173,48 @@ class SpreadsheetModel(QAbstractTableModel):
             return num == v1
         if op == "between":
             return v1 <= num <= v2
+        if op in ("above_avg", "below_avg"):
+            avg = self._cond_avg(rule["box"])
+            if avg is None:
+                return False
+            return num > avg if op == "above_avg" else num < avg
+        if op == "top_n":
+            return num in self._cond_topn(rule["box"], int(v1 or 1))
         return False
+
+    def _cond_agg(self, box):
+        """(danh sách số, đếm-theo-chuỗi) của vùng — quét MỘT lần rồi cache theo box.
+
+        Cache bị xóa khi giá trị ô đổi (cùng chỗ xóa _eval_cache), nên một quy tắc
+        theo-vùng chỉ quét vùng một lần mỗi lần vẽ lại thay vì mỗi ô."""
+        cached = self._cond_cache.get(box)
+        if cached is not None:
+            return cached
+        t, l, b, r = box
+        nums: list[float] = []
+        counts: dict[str, int] = {}
+        for rr in range(t, min(b, self.rowCount() - 1) + 1):
+            for cc in range(l, min(r, self.columnCount() - 1) + 1):
+                v = self._cell_value(rr, cc)
+                s = _format(v)
+                if s != "":
+                    counts[s] = counts.get(s, 0) + 1
+                if _looks_numeric(v):
+                    nums.append(float(v))
+        res = (nums, counts)
+        self._cond_cache[box] = res
+        return res
+
+    def _cond_avg(self, box):
+        nums = self._cond_agg(box)[0]
+        return sum(nums) / len(nums) if nums else None
+
+    def _cond_topn(self, box, n: int) -> set:
+        nums = sorted(self._cond_agg(box)[0], reverse=True)
+        return set(nums[:max(1, n)])
+
+    def _cond_count_value(self, box, target: str) -> int:
+        return self._cond_agg(box)[1].get(target, 0)
 
     def _alignment(self, row: int, col: int):
         fmt = self._fmt.get((row, col), {})
@@ -322,6 +376,7 @@ class SpreadsheetModel(QAbstractTableModel):
         if changed:
             self._rebuild_deps()
             self._eval_cache.clear()
+            self._cond_cache.clear()
             self._recalculate()
         return changed
 
@@ -334,6 +389,7 @@ class SpreadsheetModel(QAbstractTableModel):
         if not self._external_cells:
             return
         self._eval_cache.clear()
+        self._cond_cache.clear()
         if self.rowCount() and self.columnCount():
             self.dataChanged.emit(
                 self.index(0, 0),
@@ -348,8 +404,10 @@ class SpreadsheetModel(QAbstractTableModel):
         vẽ lại toàn bộ lưới.  Nếu cho biết ô cụ thể, BFS theo _dependents để chỉ
         xóa cache các ô bị ảnh hưởng và emit vùng bounding-box của chúng.
         """
+        self._cond_cache.clear()  # giá trị ô đổi -> số liệu vùng điều kiện cũ hết hạn
         if changed is None:
             self._eval_cache.clear()
+            self._cond_cache.clear()
             if self.rowCount() and self.columnCount():
                 tl = self.index(0, 0)
                 br = self.index(self.rowCount() - 1, self.columnCount() - 1)
@@ -390,6 +448,7 @@ class SpreadsheetModel(QAbstractTableModel):
         Trả về tập 'dirty' đã bị xóa cache. KHÔNG emit dataChanged (bên gọi tự
         quyết định vùng vẽ lại). Dùng cho thao tác đổi NHIỀU ô (fill/paste).
         """
+        self._cond_cache.clear()  # giá trị ô đổi -> số liệu vùng điều kiện cũ hết hạn
         dirty: set[tuple[int, int]] = set()
         queue = list(cells)
         while queue:
@@ -519,6 +578,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._merges = []
         self._cond_rules = []
         self._eval_cache.clear()
+        self._cond_cache.clear()
         self._undo.clear()
         self._redo.clear()
         self._rebuild_deps()
@@ -678,6 +738,7 @@ class SpreadsheetModel(QAbstractTableModel):
                     self._data[r][c] = ""
         self._merges.append((top, left, bottom, right))
         self._eval_cache.clear()
+        self._cond_cache.clear()
         self._rebuild_deps()
         self.dataChanged.emit(self.index(top, left), self.index(bottom, right), [])
         return True
@@ -738,6 +799,14 @@ class SpreadsheetModel(QAbstractTableModel):
         self._cond_rules.append(dict(rule))
         t, l, b, r = rule["box"]
         self.dataChanged.emit(self.index(t, l), self.index(b, r), [])
+
+    def remove_cond_rule(self, idx: int) -> None:
+        """Xóa một quy tắc theo chỉ số (cho hộp thoại Quản lý quy tắc)."""
+        if not (0 <= idx < len(self._cond_rules)):
+            return
+        self._push_undo(self._full_snapshot())
+        self._cond_rules.pop(idx)
+        self.layoutChanged.emit()
 
     def clear_cond_rules(self, box: tuple[int, int, int, int] | None = None) -> None:
         """Xóa quy tắc giao với ``box`` (hoặc tất cả nếu box=None)."""
@@ -806,6 +875,7 @@ class SpreadsheetModel(QAbstractTableModel):
             self._merges = list(merges)
             self._cond_rules = [dict(r) for r in cond]
             self._eval_cache.clear()
+            self._cond_cache.clear()
             self._rebuild_deps()
             self.endResetModel()
             self.mergesChanged.emit()
@@ -924,6 +994,7 @@ class SpreadsheetModel(QAbstractTableModel):
 
         self._push_undo(snapshot)
         self._eval_cache.clear()
+        self._cond_cache.clear()
         self._rebuild_deps()
         self._recalculate()
         if grew:
@@ -1018,6 +1089,7 @@ class SpreadsheetModel(QAbstractTableModel):
             # Đổi kích thước -> rebuild deps + clear toàn bộ là an toàn nhất.
             self._rebuild_deps()
             self._eval_cache.clear()
+            self._cond_cache.clear()
             self.endResetModel()
             self._fire_content_changed()
         else:
@@ -1157,6 +1229,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._data = [self._data[i] for i in order]
         self._rebuild_deps()
         self._eval_cache.clear()
+        self._cond_cache.clear()
         self.layoutChanged.emit()
         self._fire_content_changed()
 

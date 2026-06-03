@@ -568,6 +568,7 @@ class MainWindow(QMainWindow):
         self.btn_cond = self._ribbon_menu(
             sec_cell, "cond_format", tr("cond_tip"),
             [("cond_add", self.show_conditional_format),
+             ("cond_manage", self.show_manage_cond_rules),
              ("cond_clear", self._clear_conditional)],
         )
 
@@ -754,7 +755,10 @@ class MainWindow(QMainWindow):
         op_combo = QComboBox()
         for key, label in [("gt", tr("cond_gt")), ("lt", tr("cond_lt")),
                            ("eq", tr("cond_eq")), ("between", tr("cond_between")),
-                           ("contains", tr("cond_contains"))]:
+                           ("contains", tr("cond_contains")), ("begins", tr("cond_begins")),
+                           ("ends", tr("cond_ends")), ("duplicate", tr("cond_duplicate")),
+                           ("above_avg", tr("cond_above_avg")), ("below_avg", tr("cond_below_avg")),
+                           ("top_n", tr("cond_top_n"))]:
             op_combo.addItem(label, key)
         lay.addWidget(op_combo)
 
@@ -778,8 +782,12 @@ class MainWindow(QMainWindow):
         color_btn.clicked.connect(pick)
         lay.addWidget(color_btn)
 
+        _no_value = {"duplicate", "above_avg", "below_avg"}
+
         def upd():
-            v2.setVisible(op_combo.currentData() == "between")
+            op = op_combo.currentData()
+            v1.setVisible(op not in _no_value)
+            v2.setVisible(op == "between")
 
         op_combo.currentIndexChanged.connect(upd)
         upd()
@@ -798,9 +806,11 @@ class MainWindow(QMainWindow):
             return
         op = op_combo.currentData()
         rule = {"box": box, "op": op, "bg": chosen["bg"]}
-        if op == "contains":
+        if op in ("contains", "begins", "ends"):
             rule["v1"] = v1.text()
-        else:
+        elif op in ("duplicate", "above_avg", "below_avg"):
+            pass  # không cần giá trị
+        else:  # gt/lt/eq/between/top_n -> số
             try:
                 rule["v1"] = float(v1.text().replace(",", "."))
                 if op == "between":
@@ -809,6 +819,56 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, tr("cond_title"), tr("cond_invalid"))
                 return
         self.model.add_cond_rule(rule)
+
+    def show_manage_cond_rules(self) -> None:
+        """Hộp thoại Quản lý quy tắc: liệt kê, xóa từng quy tắc hoặc xóa hết."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("cond_manage"))
+        dlg.setStyleSheet(MENU_QSS)
+        lay = QVBoxLayout(dlg)
+        listw = QListWidget()
+        lay.addWidget(listw)
+
+        def refresh():
+            listw.clear()
+            for r in self.model.cond_rules():
+                listw.addItem(self._describe_cond_rule(r))
+
+        refresh()
+        row = QHBoxLayout()
+        del_btn = QPushButton(tr("cond_delete"))
+        clr_btn = QPushButton(tr("cond_clear_all"))
+        close_btn = QPushButton(tr("close"))
+        row.addWidget(del_btn)
+        row.addWidget(clr_btn)
+        row.addStretch()
+        row.addWidget(close_btn)
+        lay.addLayout(row)
+
+        def do_del():
+            i = listw.currentRow()
+            if i >= 0:
+                self.model.remove_cond_rule(i)
+                refresh()
+
+        del_btn.clicked.connect(do_del)
+        clr_btn.clicked.connect(lambda: (self.model.clear_cond_rules(), refresh()))
+        close_btn.clicked.connect(dlg.accept)
+        dlg.exec()
+
+    def _describe_cond_rule(self, r: dict) -> str:
+        """Mô tả ngắn một quy tắc cho danh sách Quản lý."""
+        t, l, b, rr = r["box"]
+        a1 = f"{formula.col_index_to_letters(l)}{t + 1}:{formula.col_index_to_letters(rr)}{b + 1}"
+        op = r.get("op")
+        labels = {"gt": "cond_gt", "lt": "cond_lt", "eq": "cond_eq", "between": "cond_between",
+                  "contains": "cond_contains", "begins": "cond_begins", "ends": "cond_ends",
+                  "duplicate": "cond_duplicate", "above_avg": "cond_above_avg",
+                  "below_avg": "cond_below_avg", "top_n": "cond_top_n"}
+        desc = tr(labels.get(op, "cond_title"))
+        if "v1" in r:
+            desc += f" {r['v1']}"
+        return f"{a1} — {desc}"
 
     def _toolbar_toggle(self, tb, text, tip, icon=None, **attr) -> QAction:
         """Legacy helper — chỉ còn dùng cho menu action."""

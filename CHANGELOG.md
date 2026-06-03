@@ -6,6 +6,15 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.18.0] - 2026-06-03
+
+### Thêm mới
+- **Nhiều kiểu định dạng có điều kiện hơn**: ngoài lớn hơn / nhỏ hơn / bằng /
+  trong khoảng / chứa chữ, nay có thêm **Bắt đầu bằng, Kết thúc bằng, Giá trị
+  trùng lặp, Trên trung bình, Dưới trung bình, Top N lớn nhất**.
+- **Quản lý quy tắc**: hộp thoại liệt kê mọi quy tắc đang có, xóa từng quy tắc
+  hoặc xóa tất cả.
+
 ## [0.17.0] - 2026-06-03
 
 ### Thêm mới
