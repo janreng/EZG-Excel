@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
@@ -57,6 +58,7 @@ from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .format_dialog import FormatCellsDialog
 from .freeze import FreezeManager
+from .mini_toolbar import make_mini_toolbar
 from .outline import OutlineModel
 from .paste_dialog import PasteSpecialDialog
 from .i18n import current_lang, load_lang, set_lang, tr
@@ -843,6 +845,33 @@ class MainWindow(QMainWindow):
                 for r in range(box[0], box[2] + 1):
                     self.view.resizeRowToContents(r)
 
+    def _toggle_fmt(self, key: str) -> None:
+        """Bật/tắt thuộc tính bool theo trạng thái ô hiện hành (cho Mini Toolbar)."""
+        cur = self.view.currentIndex()
+        on = bool(self.model.get_format(cur.row(), cur.column()).get(key)) if cur.isValid() else False
+        self._apply_format(**{key: (None if on else True)})
+
+    def _make_mini_toolbar(self, menu) -> QWidget:
+        """Dải nút định dạng nhanh gắn lên đầu menu chuột phải. Bấm xong đóng menu."""
+        def act(fn):
+            return lambda: (menu.close(), fn())
+
+        specs = [
+            ("bold", tr("bold"), act(lambda: self._toggle_fmt("bold"))),
+            ("italic", tr("italic"), act(lambda: self._toggle_fmt("italic"))),
+            ("underline", tr("underline"), act(lambda: self._toggle_fmt("underline"))),
+            None,
+            ("font_color", tr("font_color"), act(lambda: self._pick_color("color"))),
+            ("fill_color", tr("fill_color"), act(lambda: self._pick_color("bg"))),
+            ("borders", tr("border_all"), act(lambda: self._apply_border("all"))),
+            None,
+            ("align_left", tr("align_left"), act(lambda: self._apply_format(halign="left"))),
+            ("align_center", tr("align_center"), act(lambda: self._apply_format(halign="center"))),
+            ("align_right", tr("align_right"), act(lambda: self._apply_format(halign="right"))),
+            ("merge", tr("merge_tip"), act(self._toggle_merge)),
+        ]
+        return make_mini_toolbar(menu, specs)
+
     def show_format_cells(self) -> None:
         """Hộp thoại Định dạng ô (Ctrl+1) — 6 tab, áp cho mọi vùng đang chọn."""
         boxes = self._selection_ranges()
@@ -1200,6 +1229,11 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         menu.setStyleSheet(MENU_QSS)
+        # Mini Toolbar: dải nút định dạng nhanh ở đầu menu chuột phải.
+        wa = QWidgetAction(menu)
+        wa.setDefaultWidget(self._make_mini_toolbar(menu))
+        menu.addAction(wa)
+        menu.addSeparator()
         self._add_action(menu, tr("copy"), self.copy_selection)
         self._add_action(menu, tr("cut"), self.cut_selection)
         self._add_action(menu, tr("paste"), self.paste_clipboard)

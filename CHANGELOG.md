@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.15.1] - 2026-06-03
+
+### Thêm mới
+- **Thanh định dạng nhanh khi bấm chuột phải**: ngay đầu menu chuột phải có dải
+  nút đậm / nghiêng / gạch chân, màu chữ, màu nền, kẻ viền, căn trái–giữa–phải và
+  gộp ô — định dạng nhanh không cần lên thanh công cụ.
+
 ## [0.15.0] - 2026-06-03
 
 ### Thêm mới
