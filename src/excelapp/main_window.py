@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         self._manual_hidden_rows: set[int] = set()  # dòng người dùng tự ẩn (giữ qua sort/lọc)
         self._manual_hidden_cols: set[int] = set()  # cột người dùng tự ẩn
         self._outline = OutlineModel()              # nhóm gập dòng/cột
+        self._xsheet_busy = False                   # chống tái nhập khi tính lại chéo sheet
 
         if os.path.exists(icon_path()):
             self.setWindowIcon(QIcon(icon_path()))
@@ -416,6 +417,7 @@ class MainWindow(QMainWindow):
         self._manual_hidden_rows = self.sheets[0].hidden_rows
         self._manual_hidden_cols = self.sheets[0].hidden_cols
         self._outline = self.sheets[0].outline
+        self._wire_model_xsheet(self.model)  # bật tham chiếu chéo sheet
         self.sheet_tabs.blockSignals(True)
         self.sheet_tabs.addTab("Sheet1")
         self.sheet_tabs.blockSignals(False)
@@ -1106,9 +1108,35 @@ class MainWindow(QMainWindow):
             n += 1
         return f"Sheet{n}"
 
+    def _wire_model_xsheet(self, model) -> None:
+        """Gắn resolver tên-sheet + broadcast tính lại chéo cho một model."""
+        model._sheet_resolver = self._resolve_sheet_model
+        model._on_content_changed = lambda m=model: self._on_sheet_content_changed(m)
+
+    def _resolve_sheet_model(self, name: str):
+        """Tìm model theo tên sheet (không phân biệt hoa/thường)."""
+        low = name.strip().lower()
+        for s in self.sheets:
+            if s.name.lower() == low:
+                return s.model
+        return None
+
+    def _on_sheet_content_changed(self, source) -> None:
+        """Một sheet đổi nội dung -> các sheet có tham chiếu chéo tính lại."""
+        if self._xsheet_busy or len(self.sheets) < 2:
+            return
+        self._xsheet_busy = True
+        try:
+            for s in self.sheets:
+                if s.model is not source and s.model.consumes_external():
+                    s.model.invalidate_external()
+        finally:
+            self._xsheet_busy = False
+
     def add_sheet(self) -> None:
         model = SpreadsheetModel()
         model.mergesChanged.connect(self.view.refresh_spans)
+        self._wire_model_xsheet(model)
         name = self._unique_sheet_name()
         self.sheets.append(_Sheet(model, name))
         idx = len(self.sheets) - 1
@@ -1129,6 +1157,10 @@ class MainWindow(QMainWindow):
         self.sheet_tabs.blockSignals(False)
         self._active = -1
         self._activate_sheet(new_i)
+        # Sheet bị xóa -> công thức tham chiếu tới nó cần tính lại (hiện #REF!).
+        for s in self.sheets:
+            if s.model.consumes_external():
+                s.model.invalidate_external()
 
     def _rename_sheet(self, i: int) -> None:
         if not (0 <= i < len(self.sheets)):
@@ -1142,8 +1174,12 @@ class MainWindow(QMainWindow):
         if any(s.name == name for s in self.sheets):
             QMessageBox.information(self, APP_NAME, tr("sheet_dup"))
             return
+        old = self.sheets[i].name
         self.sheets[i].name = name
         self.sheet_tabs.setTabText(i, name)
+        # Cập nhật mọi công thức tham chiếu chéo tới sheet vừa đổi tên.
+        for s in self.sheets:
+            s.model.rename_sheet_in_formulas(old, name)
 
     def _duplicate_sheet(self, i: int) -> None:
         src = self.sheets[i]
@@ -1152,6 +1188,7 @@ class MainWindow(QMainWindow):
             src.model.raw_grid(), src.model.all_formats(), src.model.merges()
         )
         model.mergesChanged.connect(self.view.refresh_spans)
+        self._wire_model_xsheet(model)
         name = self._unique_sheet_name()
         self.sheets.insert(i + 1, _Sheet(model, name))
         self.sheet_tabs.blockSignals(True)
@@ -1184,6 +1221,7 @@ class MainWindow(QMainWindow):
             model = SpreadsheetModel()
             model.replace_all_with_fmt(rows, fmt, merges)
             model.mergesChanged.connect(self.view.refresh_spans)
+            self._wire_model_xsheet(model)
             self.sheets.append(_Sheet(model, name))
             self.sheet_tabs.addTab(name)
         self.sheet_tabs.setCurrentIndex(0)

@@ -74,6 +74,17 @@ def col_index_to_letters(index: int) -> str:
     return result
 
 
+def split_sheet_ref(value: str) -> tuple[str, str]:
+    """'Sheet1!B3' -> ('Sheet1', 'B3'); \"'Báo cáo'!A1\" -> ('Báo cáo', 'A1').
+
+    Bỏ dấu nháy đơn quanh tên sheet (cho tên có khoảng trắng)."""
+    sheet, _, cell = value.partition("!")
+    sheet = sheet.strip()
+    if len(sheet) >= 2 and sheet[0] == "'" and sheet[-1] == "'":
+        sheet = sheet[1:-1]
+    return sheet, cell
+
+
 def parse_cell_ref(ref: str) -> tuple[int, int]:
     """'B3' -> (row=2, col=1). Raise nếu sai cú pháp."""
     m = _CELL_RE.match(ref)
@@ -191,6 +202,7 @@ _TOKEN_RE = re.compile(
     r"""
       (?P<NUMBER>\d+\.\d+|\d+|\.\d+)
     | (?P<STRING>"(?:[^"\\]|\\.)*")
+    | (?P<SHEETCELL>(?:'[^']*'|[A-Za-z_][A-Za-z0-9_]*)!\$?[A-Za-z]+\$?\d+(?![A-Za-z0-9_])(?!\s*\())
     | (?P<CELL>\$?[A-Za-z]+\$?\d+(?![A-Za-z0-9_])(?!\s*\())
     | (?P<IDENT>[A-Za-z_][A-Za-z0-9_]*)
     | (?P<OP>>=|<=|<>|[+\-*/^(),:<>=])
@@ -2160,6 +2172,10 @@ class _Parser:
             return _unescape(tok.value)
         if tok.kind == "CELL":
             return self._cell_value(tok.value)
+        if tok.kind == "SHEETCELL":
+            sheet, cell = split_sheet_ref(tok.value)
+            row, col = parse_cell_ref(cell)
+            return self.resolver(row, col, sheet)
         if tok.kind == "IDENT":
             return self._function_call(tok.value)
         if tok.kind == "OP" and tok.value == "(":
@@ -2201,15 +2217,27 @@ class _Parser:
             if end_tok.kind != "CELL":
                 raise FormulaError("Vùng không hợp lệ")
             return [self._expand_range(start, end_tok.value)]
+        # Vùng chéo sheet: Sheet1!A1:B3 (sheet áp cho cả vùng, đầu cuối cùng sheet).
+        if tok and tok.kind == "SHEETCELL" and nxt and nxt.kind == "OP" and nxt.value == ":":
+            sheet, start_cell = split_sheet_ref(tok.value)
+            self.pos += 2
+            end_tok = self._next()
+            if end_tok.kind != "CELL":
+                raise FormulaError("Vùng không hợp lệ")
+            return [self._expand_range(start_cell, end_tok.value, sheet)]
         return [self._comparison()]
 
-    def _expand_range(self, start: str, end: str) -> _Range:
+    def _expand_range(self, start: str, end: str, sheet: str | None = None) -> _Range:
         r1, c1 = parse_cell_ref(start)
         r2, c2 = parse_cell_ref(end)
         r1, r2 = sorted((r1, r2))
         c1, c2 = sorted((c1, c2))
-        rows = [[self.resolver(r, c) for c in range(c1, c2 + 1)]
-                for r in range(r1, r2 + 1)]
+        if sheet is None:
+            rows = [[self.resolver(r, c) for c in range(c1, c2 + 1)]
+                    for r in range(r1, r2 + 1)]
+        else:
+            rows = [[self.resolver(r, c, sheet) for c in range(c1, c2 + 1)]
+                    for r in range(r1, r2 + 1)]
         return _Range(rows)
 
     # --- đối số tính lười (cho IF/IFERROR/IFS) ---
@@ -2309,11 +2337,54 @@ def offset_formula(formula_text: str, drow: int, dcol: int) -> str:
         tokens = _tokenize(body)
     except FormulaError:
         return formula_text
-    parts = [
-        _offset_cell(t.value, drow, dcol) if t.kind == "CELL" else t.value
-        for t in tokens
-    ]
+    parts = []
+    for t in tokens:
+        if t.kind == "CELL":
+            parts.append(_offset_cell(t.value, drow, dcol))
+        elif t.kind == "SHEETCELL":
+            sheet, cell = split_sheet_ref(t.value)
+            # Giữ nguyên tên sheet (kèm nháy nếu vốn có), chỉ dịch phần ô.
+            prefix = t.value[: t.value.index("!") + 1]
+            parts.append(prefix + _offset_cell(cell, drow, dcol))
+        else:
+            parts.append(t.value)
     return "=" + "".join(parts)
+
+
+_BARE_SHEET_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def rename_sheet_refs(formula_str: str, old_name: str, new_name: str) -> str:
+    """Đổi tên sheet trong mọi tham chiếu chéo (Sheet2!A1 -> Data!A1).
+
+    Trả nguyên văn nếu công thức không đụng tới ``old_name`` (giữ định dạng gốc).
+    """
+    body = formula_str[1:] if formula_str.startswith("=") else formula_str
+    try:
+        tokens = _tokenize(body)
+    except FormulaError:
+        return formula_str
+    low = old_name.strip().lower()
+    quoted_new = new_name if _BARE_SHEET_RE.match(new_name) else f"'{new_name}'"
+    out, changed = [], False
+    for t in tokens:
+        if t.kind == "SHEETCELL":
+            sheet, cell = split_sheet_ref(t.value)
+            if sheet.lower() == low:
+                out.append(f"{quoted_new}!{cell}")
+                changed = True
+                continue
+        out.append(t.value)
+    return ("=" + "".join(out)) if changed else formula_str
+
+
+def has_external_ref(formula_str: str) -> bool:
+    """True nếu công thức có tham chiếu chéo sheet (Sheet1!A1)."""
+    body = formula_str[1:] if formula_str.startswith("=") else formula_str
+    try:
+        return any(t.kind == "SHEETCELL" for t in _tokenize(body))
+    except FormulaError:
+        return False
 
 
 def extract_refs(formula_str: str) -> set[tuple[int, int]]:

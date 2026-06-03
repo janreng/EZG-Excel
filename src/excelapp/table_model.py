@@ -57,6 +57,11 @@ class SpreadsheetModel(QAbstractTableModel):
         # _dependents[B] = tập ô có công thức tham chiếu tới B.
         self._deps: dict[tuple[int, int], set] = {}
         self._dependents: dict[tuple[int, int], set] = {}
+        # Cross-sheet: resolver trả model của sheet theo tên (workbook gắn vào);
+        # broadcast: gọi khi nội dung đổi để các sheet tham chiếu chéo tính lại.
+        self._sheet_resolver = None       # Callable[[str], SpreadsheetModel | None]
+        self._on_content_changed = None   # Callable[[], None]
+        self._external_cells: set[tuple[int, int]] = set()  # ô có tham chiếu chéo sheet
         self._rebuild_deps()
         self._undo: list[tuple] = []
         self._redo: list[tuple] = []
@@ -201,8 +206,21 @@ class SpreadsheetModel(QAbstractTableModel):
         """Giá trị đã tính của ô (public). Dùng cho status bar / tính toán ngoài."""
         return self._cell_value(row, col)
 
-    def _cell_value(self, row: int, col: int):
-        """Giá trị đã tính của ô (số/chuỗi). Có cache và phát hiện vòng lặp."""
+    def _cell_value(self, row: int, col: int, sheet=None):
+        """Giá trị đã tính của ô (số/chuỗi). Có cache và phát hiện vòng lặp.
+
+        ``sheet`` != None: tham chiếu chéo sheet (Sheet1!A1) -> hỏi model sheet đó
+        (mỗi model tự có cache + chống lặp vòng riêng, nên vòng chéo sheet vẫn bắt được).
+        """
+        if sheet is not None:
+            target = self._sheet_resolver(sheet) if self._sheet_resolver else None
+            if target is None:
+                raise formula.FormulaError("Sheet không tồn tại", formula.ERR_REF)
+            if target is not self:
+                if not (0 <= row < target.rowCount() and 0 <= col < target.columnCount()):
+                    return ""  # ngoài lưới sheet đích -> rỗng (kiểu Excel coi như 0)
+                return target._cell_value(row, col)
+            # cùng sheet -> rơi xuống nhánh nội bộ bên dưới
         key = (row, col)
         if key in self._eval_cache:
             return self._eval_cache[key]
@@ -249,6 +267,7 @@ class SpreadsheetModel(QAbstractTableModel):
         """Xây lại toàn bộ dependency map từ dữ liệu thô hiện tại."""
         self._deps.clear()
         self._dependents.clear()
+        self._external_cells.clear()
         for r, row in enumerate(self._data):
             for c, raw in enumerate(row):
                 if formula.is_formula(raw):
@@ -257,6 +276,8 @@ class SpreadsheetModel(QAbstractTableModel):
                         self._deps[(r, c)] = refs
                         for dep in refs:
                             self._dependents.setdefault(dep, set()).add((r, c))
+                    if formula.has_external_ref(raw):
+                        self._external_cells.add((r, c))
 
     def _update_deps(self, row: int, col: int) -> None:
         """Cập nhật dependency map cho một ô sau khi nội dung thay đổi."""
@@ -267,6 +288,7 @@ class SpreadsheetModel(QAbstractTableModel):
                 s.discard(key)
                 if not s:
                     del self._dependents[dep]
+        self._external_cells.discard(key)
         raw = self._data[row][col]
         if formula.is_formula(raw):
             refs = formula.extract_refs(raw)
@@ -274,6 +296,41 @@ class SpreadsheetModel(QAbstractTableModel):
                 self._deps[key] = refs
                 for dep in refs:
                     self._dependents.setdefault(dep, set()).add(key)
+            if formula.has_external_ref(raw):
+                self._external_cells.add(key)
+
+    def rename_sheet_in_formulas(self, old_name: str, new_name: str) -> bool:
+        """Đổi tên sheet trong mọi công thức của model này. Trả True nếu có đổi."""
+        changed = False
+        for r in range(len(self._data)):
+            for c in range(len(self._data[r])):
+                raw = self._data[r][c]
+                if formula.is_formula(raw):
+                    new = formula.rename_sheet_refs(raw, old_name, new_name)
+                    if new != raw:
+                        self._data[r][c] = new
+                        changed = True
+        if changed:
+            self._rebuild_deps()
+            self._eval_cache.clear()
+            self._recalculate()
+        return changed
+
+    def consumes_external(self) -> bool:
+        """Có ô nào tham chiếu chéo sheet không (để workbook biết cần tính lại)."""
+        return bool(self._external_cells)
+
+    def invalidate_external(self) -> None:
+        """Xóa cache + vẽ lại — gọi khi một sheet khác đổi, để ô chéo sheet tính lại."""
+        if not self._external_cells:
+            return
+        self._eval_cache.clear()
+        if self.rowCount() and self.columnCount():
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(self.rowCount() - 1, self.columnCount() - 1),
+                [Qt.DisplayRole],
+            )
 
     def _recalculate(self, changed: tuple[int, int] | None = None) -> None:
         """Xóa cache công thức bị ảnh hưởng và yêu cầu Qt vẽ lại.
@@ -288,6 +345,7 @@ class SpreadsheetModel(QAbstractTableModel):
                 tl = self.index(0, 0)
                 br = self.index(self.rowCount() - 1, self.columnCount() - 1)
                 self.dataChanged.emit(tl, br, [Qt.DisplayRole])
+            self._fire_content_changed()
             return
 
         # Selective invalidation: BFS từ ô vừa đổi qua đồ thị phụ thuộc ngược.
@@ -310,6 +368,12 @@ class SpreadsheetModel(QAbstractTableModel):
         tl = self.index(min(rows_), min(cols_))
         br = self.index(max(rows_), max(cols_))
         self.dataChanged.emit(tl, br, [Qt.DisplayRole])
+        self._fire_content_changed()
+
+    def _fire_content_changed(self) -> None:
+        """Báo workbook rằng nội dung sheet này đổi (để sheet khác tính lại chéo)."""
+        if self._on_content_changed is not None:
+            self._on_content_changed()
 
     def _recalc_cells(self, cells) -> set[tuple[int, int]]:
         """Vô hiệu cache của ``cells`` + mọi ô phụ thuộc (BFS ngược).
@@ -329,6 +393,7 @@ class SpreadsheetModel(QAbstractTableModel):
                     queue.append(dep)
         for cell in dirty:
             self._eval_cache.pop(cell, None)
+        self._fire_content_changed()
         return dirty
 
     def flags(self, index: QModelIndex):
@@ -735,6 +800,7 @@ class SpreadsheetModel(QAbstractTableModel):
             self._rebuild_deps()
             self.endResetModel()
             self.mergesChanged.emit()
+            self._fire_content_changed()   # undo/redo cấu trúc -> sheet khác tính lại
         elif kind == "cells":
             _, changes = entry
             # direction="undo" -> restore old; direction="redo" -> restore new
@@ -944,6 +1010,7 @@ class SpreadsheetModel(QAbstractTableModel):
             self._rebuild_deps()
             self._eval_cache.clear()
             self.endResetModel()
+            self._fire_content_changed()
         else:
             # Cập nhật deps cục bộ + vô hiệu cache chọn lọc.
             for r, c, _old, _new in changes:
@@ -1082,6 +1149,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._rebuild_deps()
         self._eval_cache.clear()
         self.layoutChanged.emit()
+        self._fire_content_changed()
 
 
 # ---------------------------------------------------------------- tiện ích định dạng

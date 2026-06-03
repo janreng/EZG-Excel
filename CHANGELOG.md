@@ -6,6 +6,15 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.16.0] - 2026-06-03
+
+### Thêm mới
+- **Tham chiếu chéo sheet trong công thức**: dùng `Tên_Sheet!A1` (hoặc `'Tên có dấu
+  cách'!A1`) để lấy dữ liệu từ sheet khác, kể cả vùng `Sheet2!A1:B10` trong các hàm
+  như SUM, VLOOKUP… Sửa ô ở sheet nguồn thì **mọi sheet tham chiếu tự tính lại ngay**.
+- **Đổi tên sheet tự cập nhật công thức**: đổi tên một sheet sẽ tự sửa các công thức
+  đang trỏ tới nó nên không bị hỏng tham chiếu.
+
 ## [0.15.1] - 2026-06-03
 
 ### Thêm mới
