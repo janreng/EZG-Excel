@@ -408,6 +408,14 @@ class SpreadsheetModel(QAbstractTableModel):
             self._recalculate()
         return changed
 
+    def precedents(self, row: int, col: int) -> list[tuple[int, int]]:
+        """Các ô mà công thức tại (row,col) trực tiếp tham chiếu (cùng sheet)."""
+        return sorted(self._deps.get((row, col), set()))
+
+    def dependents(self, row: int, col: int) -> list[tuple[int, int]]:
+        """Các ô có công thức tham chiếu trực tiếp tới (row,col) (cùng sheet)."""
+        return sorted(self._dependents.get((row, col), set()))
+
     def consumes_external(self) -> bool:
         """Có ô nào tham chiếu chéo sheet không (để workbook biết cần tính lại)."""
         return bool(self._external_cells)

@@ -60,6 +60,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "flash_need_example": {"vi": "Hãy gõ ít nhất một ví dụ ở cột này trước.", "en": "Type at least one example in this column first."},
     "flash_no_pattern": {"vi": "Không suy được mẫu để điền.", "en": "Could not infer a fill pattern."},
     "flash_done": {"vi": "Đã điền theo mẫu", "en": "Filled by example"},
+    "trace_prec": {"vi": "Truy vết ô tham chiếu (cùng sheet)", "en": "Trace precedents (same sheet)"},
+    "trace_dep": {"vi": "Truy vết ô phụ thuộc (cùng sheet)", "en": "Trace dependents (same sheet)"},
+    "trace_prec_none": {"vi": "Ô này không tham chiếu ô nào.", "en": "This cell references no cells."},
+    "trace_dep_none": {"vi": "Không ô nào phụ thuộc ô này.", "en": "No cells depend on this cell."},
     "total_row_busy": {
         "vi": "Dòng dưới bảng đang có dữ liệu — không thể thêm hàng Tổng.",
         "en": "The row below the table is not empty — cannot add a total row.",

@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.19.1] - 2026-06-03
+
+### Thêm mới
+- **Truy vết ô liên quan**: với ô đang chọn, xem nhanh **những ô mà công thức tham
+  chiếu tới** (precedents) hoặc **những ô phụ thuộc vào ô này** (dependents) — các ô
+  liên quan được bôi đen và liệt kê địa chỉ ở thanh trạng thái. Trong menu Dữ liệu.
+
 ## [0.19.0] - 2026-06-03
 
 ### Thêm mới

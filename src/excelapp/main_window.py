@@ -7,7 +7,15 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSettings, Qt, QThread, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QItemSelection,
+    QItemSelectionModel,
+    QSettings,
+    Qt,
+    QThread,
+    Signal,
+)
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -1027,6 +1035,8 @@ class MainWindow(QMainWindow):
         self._add_action(data_menu, tr("autosum"), self._autosum, QKeySequence("Alt+="))
         self._add_action(data_menu, tr("flash_fill"), self.flash_fill_command,
                          QKeySequence("Ctrl+E"))
+        self._add_action(data_menu, tr("trace_prec"), self.trace_precedents)
+        self._add_action(data_menu, tr("trace_dep"), self.trace_dependents)
         self._add_action(
             data_menu, tr("insert_date"), lambda: self._insert_now("date"),
             QKeySequence("Ctrl+;"),
@@ -1886,6 +1896,35 @@ class MainWindow(QMainWindow):
             return
         self.model.set_values(to_fill)
         self.statusBar().showMessage(tr("flash_done"), 2000)
+
+    # ------------------------------------------------------------ Truy vết ô liên quan
+    def trace_precedents(self) -> None:
+        self._trace(self.model.precedents, "trace_prec_none", "trace_prec")
+
+    def trace_dependents(self) -> None:
+        self._trace(self.model.dependents, "trace_dep_none", "trace_dep")
+
+    def _trace(self, getter, none_key: str, label_key: str) -> None:
+        """Chọn + liệt kê các ô tham chiếu / phụ thuộc của ô hiện tại."""
+        idx = self.view.currentIndex()
+        if not idx.isValid():
+            return
+        cells = [(r, c) for (r, c) in getter(idx.row(), idx.column())
+                 if 0 <= r < self.model.rowCount() and 0 <= c < self.model.columnCount()]
+        if not cells:
+            self.statusBar().showMessage(tr(none_key), 3000)
+            return
+        sel = QItemSelection()
+        for r, c in cells:
+            i = self.model.index(r, c)
+            sel.select(i, i)
+        # Đặt ô hiện hành trước (NoUpdate) để không xóa mất vùng chọn vừa tạo.
+        self.view.selectionModel().setCurrentIndex(
+            self.model.index(*cells[0]), QItemSelectionModel.NoUpdate
+        )
+        self.view.selectionModel().select(sel, QItemSelectionModel.ClearAndSelect)
+        a1 = ", ".join(f"{formula.col_index_to_letters(c)}{r + 1}" for r, c in cells)
+        self.statusBar().showMessage(f"{tr(label_key)}: {a1}", 5000)
 
     # ------------------------------------------------------------ Bảng (Ctrl+T)
     def _active_tables(self) -> TableModel:
