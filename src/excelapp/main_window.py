@@ -59,6 +59,7 @@ from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
 from .resources import icon_path
 from .table_model import SpreadsheetModel
+from .ui_style import MENU_QSS
 from .view import SpreadsheetView
 
 
@@ -645,6 +646,7 @@ class MainWindow(QMainWindow):
         btn._default_icon = default_icon
         btn._icon_map = {value: icon for icon, _label, value in options}
         menu = QMenu(btn)
+        menu.setStyleSheet(MENU_QSS)  # nền trắng, không bị đen do cascade ribbon
         for icon, label, value in options:
             act = menu.addAction(make_icon(icon), tr(label))
             act.triggered.connect(
@@ -666,6 +668,7 @@ class MainWindow(QMainWindow):
         btn.setIcon(make_icon(icon_name))
         btn.setToolTip(tip)
         menu = QMenu(btn)
+        menu.setStyleSheet(MENU_QSS)  # nền trắng, không bị đen do cascade ribbon
         for label_key, slot in options:
             act = menu.addAction(tr(label_key))
             act.triggered.connect(lambda _c=False, s=slot: s())
@@ -1045,6 +1048,7 @@ class MainWindow(QMainWindow):
         if i < 0:
             return
         menu = QMenu(self)
+        menu.setStyleSheet(MENU_QSS)
         menu.addAction(tr("sheet_rename"), lambda: self._rename_sheet(i))
         menu.addAction(tr("sheet_duplicate"), lambda: self._duplicate_sheet(i))
         menu.addAction(tr("sheet_delete"), lambda: self._delete_sheet(i))
@@ -1103,6 +1107,7 @@ class MainWindow(QMainWindow):
             self.view.setCurrentIndex(index)
 
         menu = QMenu(self)
+        menu.setStyleSheet(MENU_QSS)
         self._add_action(menu, tr("copy"), self.copy_selection)
         self._add_action(menu, tr("cut"), self.cut_selection)
         self._add_action(menu, tr("paste"), self.paste_clipboard)
@@ -1276,6 +1281,7 @@ class MainWindow(QMainWindow):
     def _show_statusbar_menu(self, pos) -> None:
         """Menu chuột phải: bật/tắt từng item thống kê (lưu QSettings)."""
         menu = QMenu(self)
+        menu.setStyleSheet(MENU_QSS)
         title = menu.addAction(tr("statusbar_customize"))
         title.setEnabled(False)
         menu.addSeparator()

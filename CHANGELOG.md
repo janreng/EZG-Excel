@@ -6,6 +6,12 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.7] - 2026-06-03
+
+### Sửa
+- Sửa lỗi **menu thả xuống bị nền đen** (menu kẻ viền, định dạng số…) khiến chữ
+  khó đọc — giờ nền trắng, chữ rõ như các menu khác.
+
 ## [0.12.6] - 2026-06-03
 
 ### Thay đổi

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 from . import APP_NAME
 from .main_window import MainWindow
 from .resources import icon_path
+from .ui_style import MENU_QSS
 
 
 def _light_palette() -> QPalette:
@@ -46,6 +47,7 @@ def main() -> int:
     # Fusion: giao diện đồng nhất, bỏ "thanh accent" chọn ô của Windows 11.
     app.setStyle("Fusion")
     app.setPalette(_light_palette())  # ép nền sáng, tránh dark mode làm đen popup
+    app.setStyleSheet(MENU_QSS)  # nền trắng cho popup menu không thuộc widget có stylesheet
     if os.path.exists(icon_path()):
         app.setWindowIcon(QIcon(icon_path()))
     window = MainWindow()
