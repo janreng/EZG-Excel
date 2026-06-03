@@ -2,7 +2,7 @@
 ; Compile: build_installer.bat  (or open with Inno Setup Compiler).
 
 #define MyAppName "Ezcel"
-#define MyAppVersion "0.19.1"
+#define MyAppVersion "0.19.2"
 #define MyAppPublisher "EZG"
 #define MyAppExeName "Ezcel.exe"
 
@@ -33,6 +33,19 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
 Name: "contextmenu"; Description: "Add ""Open with Ezcel"" to the right-click menu for .csv/.xlsx files"; GroupDescription: "Integration:"; Flags: unchecked
+
+[InstallDelete]
+; Dọn các bản exe & lối tắt của tên cũ (PyExcel / EZG-Excel) còn sót lại sau khi
+; ứng dụng đổi tên qua các phiên — chạy trước khi chép file mới.
+Type: files; Name: "{app}\PyExcel.exe"
+Type: files; Name: "{app}\EZG-Excel.exe"
+Type: files; Name: "{app}\EZG - Excel.exe"
+Type: files; Name: "{autodesktop}\PyExcel.lnk"
+Type: files; Name: "{autodesktop}\EZG-Excel.lnk"
+Type: files; Name: "{autodesktop}\EZG - Excel.lnk"
+Type: filesandordirs; Name: "{autoprograms}\PyExcel"
+Type: filesandordirs; Name: "{autoprograms}\EZG-Excel"
+Type: filesandordirs; Name: "{autoprograms}\EZG - Excel"
 
 [Files]
 ; Bundle the whole onedir folder produced by PyInstaller.

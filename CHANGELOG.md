@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.19.2] - 2026-06-03
+
+### Sửa
+- Bộ cài nay **tự dọn các bản ứng dụng cũ còn sót** (từ những lần đổi tên trước)
+  — gỡ file chạy và lối tắt cũ trong thư mục cài và Start Menu, không còn để lại
+  nhiều biểu tượng trùng lặp.
+
 ## [0.19.1] - 2026-06-03
 
 ### Thêm mới
