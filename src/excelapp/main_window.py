@@ -18,6 +18,7 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
     QApplication,
     QCheckBox,
     QColorDialog,
@@ -50,6 +51,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
+from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .freeze import FreezeManager
 from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
@@ -184,6 +186,7 @@ class MainWindow(QMainWindow):
         self._actions: dict[str, QAction] = {}  # phím tắt tùy chỉnh
         self._updating_toolbar = False
         self._fx_picking = False  # True khi đang soạn công thức (bấm ô chèn ref)
+        self._cell_mode = CellMode.READY  # Spec 03 — khởi tạo sớm trước khi nối signal
         self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
 
         if os.path.exists(icon_path()):
@@ -334,6 +337,9 @@ class MainWindow(QMainWindow):
         # Soạn công thức: bấm ô để chèn tham chiếu (như Excel).
         self.view.formula_pick_active = lambda: self._fx_picking
         self.view.cellPicked.connect(self._insert_cell_ref)
+        # Cell Mode indicator (Spec 03): bắt đầu/kết thúc sửa ô trong lưới.
+        self.view.editStarted.connect(self._on_edit_started)
+        self.view.itemDelegate().closeEditor.connect(self._on_editor_closed)
         self._wire_selection()
         layout.addWidget(self.view, 1)
 
@@ -388,7 +394,13 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         # ---- Status bar ----
-        self.statusBar().showMessage(tr("ready"))
+        # Cell Mode indicator (Ready/Enter/Edit/Point) — góc trái như Excel.
+        self._mode_label = QLabel("")
+        self._mode_label.setStyleSheet(
+            "QLabel { color: #444; font-size: 12px; padding: 0 10px; }"
+        )
+        self.statusBar().addWidget(self._mode_label)
+        self._set_cell_mode(CellMode.READY)
         self._stats_label = QLabel("")
         self._stats_label.setStyleSheet("QLabel { color: #595959; font-size: 12px; padding: 0 8px; }")
         self.statusBar().addPermanentWidget(self._stats_label)
@@ -1031,7 +1043,7 @@ class MainWindow(QMainWindow):
     def _retranslate(self) -> None:
         self._build_menu()
         self.formula_edit.setPlaceholderText(tr("formula_placeholder"))
-        self.statusBar().showMessage(tr("ready"))
+        self._set_cell_mode(self._cell_mode)  # cập nhật nhãn mode theo ngôn ngữ mới
         self._update_title()
         # Tooltip trên toolbar.
         self.font_combo.setToolTip(tr("tooltip_font"))
@@ -1071,6 +1083,43 @@ class MainWindow(QMainWindow):
         self._add_action(menu, tr("clear"), self.clear_selection)
         menu.exec(self.view.viewport().mapToGlobal(pos))
 
+    # ------------------------------------------------------------ Cell Mode (Spec 03)
+    def _set_cell_mode(self, mode: CellMode) -> None:
+        """Đặt mode hiện tại + cập nhật nhãn Status Bar (Ready/Enter/Edit/Point)."""
+        self._cell_mode = mode
+        labels = {
+            CellMode.READY: tr("mode_ready"),
+            CellMode.ENTER: tr("mode_enter"),
+            CellMode.EDIT: tr("mode_edit"),
+            CellMode.POINT: tr("mode_point"),
+        }
+        self._mode_label.setText(labels.get(mode, ""))
+
+    def _apply_mode_event(self, event: ModeEvent) -> None:
+        """Chạy 1 transition của state machine; đổi nhãn nếu mode thay đổi."""
+        new = mode_transition(self._cell_mode, event)
+        if new != self._cell_mode:
+            self._set_cell_mode(new)
+
+    def _on_edit_started(self, is_enter: bool) -> None:
+        """View bắt đầu sửa ô: gõ ký tự -> Enter; F2/double-click -> Edit."""
+        self._apply_mode_event(
+            ModeEvent.TYPE_CHAR if is_enter else ModeEvent.DBLCLICK_DATA
+        )
+
+    def _on_editor_closed(self, _editor=None, hint=None) -> None:
+        """Editor trong lưới đóng -> về Ready (trừ khi đang chọn ref).
+
+        Phân biệt hủy (Esc -> RevertModelCache) vs xác nhận để event đúng nghĩa;
+        cả hai đều dẫn về Ready nhưng giữ ngữ nghĩa cho logic sau này.
+        """
+        if self._fx_picking:
+            return
+        if hint == QAbstractItemDelegate.RevertModelCache:
+            self._apply_mode_event(ModeEvent.CANCEL)
+        else:
+            self._apply_mode_event(ModeEvent.COMMIT)
+
     # ------------------------------------------------------------ thanh công thức
     def _on_current_changed(self, current, _previous) -> None:
         if not current.isValid():
@@ -1080,6 +1129,8 @@ class MainWindow(QMainWindow):
         self.formula_edit.setText(self.model.data(current, Qt.EditRole) or "")
         self._hide_formula_buttons()
         self._sync_toolbar(current.row(), current.column())
+        # Di chuyển ô (điều hướng/commit) = không còn sửa -> Ready.
+        self._apply_mode_event(ModeEvent.COMMIT)
 
     def _on_formula_edited(self, text: str) -> None:
         """Khi user bắt đầu gõ vào formula bar, hiện nút ✕ và ✓."""
@@ -1087,6 +1138,8 @@ class MainWindow(QMainWindow):
         self.btn_accept_edit.setVisible(True)
         # Bật chế độ chọn ô chèn ref khi nội dung là công thức (bắt đầu '=').
         self._fx_picking = text.startswith("=")
+        # Soạn trên thanh công thức = Edit (từ Ready); giữ nguyên nếu đang Point.
+        self._apply_mode_event(ModeEvent.FOCUS_FORMULA_BAR)
 
     def _hide_formula_buttons(self) -> None:
         self.btn_cancel_edit.setVisible(False)
@@ -1102,6 +1155,8 @@ class MainWindow(QMainWindow):
         le.setText(text[:pos] + ref + text[pos:])
         le.setCursorPosition(pos + len(ref))
         le.setFocus()
+        # Chọn ô làm tham chiếu khi đang soạn công thức -> Point mode.
+        self._apply_mode_event(ModeEvent.PICK_REF)
 
     def _cancel_formula_edit(self) -> None:
         """Hủy sửa — khôi phục nội dung cũ."""
@@ -1109,6 +1164,7 @@ class MainWindow(QMainWindow):
         if cur.isValid():
             self.formula_edit.setText(self.model.data(cur, Qt.EditRole) or "")
         self._hide_formula_buttons()
+        self._apply_mode_event(ModeEvent.CANCEL)
         self.view.setFocus()
 
     def eventFilter(self, obj, event):
@@ -1213,6 +1269,7 @@ class MainWindow(QMainWindow):
         if index.isValid():
             self.model.setData(index, self.formula_edit.text(), Qt.EditRole)
         self._hide_formula_buttons()
+        self._apply_mode_event(ModeEvent.COMMIT)
         self.view.setFocus()
 
     # ------------------------------------------------------------ thao tác tệp

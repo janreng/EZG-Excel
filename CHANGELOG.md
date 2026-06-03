@@ -6,6 +6,24 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.2] - 2026-06-03
+
+### Thêm mới
+- **Cell Mode indicator kiểu Excel** (Spec 03, Phase 1): thanh trạng thái góc
+  trái hiển thị mode hiện tại — **Sẵn sàng / Nhập / Chỉnh sửa / Trỏ**
+  (Ready / Enter / Edit / Point):
+  - Gõ ký tự vào ô → **Nhập (Enter)**; F2 / double-click ô có data → **Chỉnh
+    sửa (Edit)**; chọn ô làm tham chiếu khi soạn công thức → **Trỏ (Point)**;
+    commit / Esc / di chuyển ô → **Sẵn sàng (Ready)**.
+  - State machine tách module thuần `cell_mode.py` (`CellMode` + `transition()`),
+    19 unit test bám bảng chuyển trạng thái Spec 03.
+  - Esc khi đang sửa: hủy toàn bộ về Ready (đúng Excel — không có bước trung gian).
+
+### Ghi chú
+- Bản này làm **indicator + state machine** (gốc của mọi keyboard behavior).
+  Phần Point mode dùng **phím mũi tên** để chọn/mở rộng tham chiếu (gõ `=` rồi ↑↓)
+  còn hoãn sang bản sau — hiện Point kích hoạt qua **click ô** khi soạn công thức.
+
 ## [0.12.1] - 2026-06-03
 
 ### Thêm mới

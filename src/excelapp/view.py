@@ -13,6 +13,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPainter, QPen, QRegion
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QAbstractItemView,
     QFrame,
     QHeaderView,
     QStyle,
@@ -163,6 +164,9 @@ class CellDelegate(QStyledItemDelegate):
 class SpreadsheetView(QTableView):
     # Phát khi đang soạn công thức và người dùng bấm 1 ô để chèn tham chiếu.
     cellPicked = Signal(int, int)
+    # Phát khi bắt đầu sửa ô trong lưới: True = gõ ký tự (ENTER mode),
+    # False = F2/double-click ô có sẵn (EDIT mode). Dùng cho indicator Cell Mode.
+    editStarted = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -346,6 +350,23 @@ class SpreadsheetView(QTableView):
         v.blockSignals(False)
         self.model().move_row(old_visual, new_visual)
         self.select_box((new_visual, 0, new_visual, self.model().columnCount() - 1))
+
+    # ------------------------------------------------------------ bắt đầu sửa ô
+    def edit(self, index, trigger, event):
+        """Override để phân biệt ENTER (gõ ký tự) vs EDIT (F2/double-click).
+
+        Phát ``editStarted`` cho main_window cập nhật Cell Mode indicator. Chỉ
+        phát với trigger do người dùng chủ động (gõ / F2 / double-click), bỏ qua
+        các lần ``edit()`` gọi nội bộ với NoEditTriggers.
+        """
+        if trigger == QAbstractItemView.AnyKeyPressed:
+            self.editStarted.emit(True)   # gõ ký tự -> ENTER
+        elif trigger in (
+            QAbstractItemView.DoubleClicked,
+            QAbstractItemView.EditKeyPressed,  # F2
+        ):
+            self.editStarted.emit(False)  # F2 / double-click -> EDIT
+        return super().edit(index, trigger, event)
 
     # ------------------------------------------------------------ Ctrl+Shift+mũi tên
     def keyPressEvent(self, event):

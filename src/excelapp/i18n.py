@@ -189,6 +189,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "vi": "Tham chiếu không hợp lệ.",
         "en": "Reference is not valid.",
     },
+    # --- Cell Mode indicator (Spec 03) ---
+    "mode_ready": {"vi": "Sẵn sàng", "en": "Ready"},
+    "mode_enter": {"vi": "Nhập", "en": "Enter"},
+    "mode_edit": {"vi": "Chỉnh sửa", "en": "Edit"},
+    "mode_point": {"vi": "Trỏ", "en": "Point"},
     # --- định dạng có điều kiện ---
     "cond_tip": {"vi": "Định dạng có điều kiện", "en": "Conditional formatting"},
     "cond_add": {"vi": "Thêm quy tắc...", "en": "Add rule..."},
