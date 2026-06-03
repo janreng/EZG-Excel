@@ -6,6 +6,27 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.3] - 2026-06-03
+
+### Thêm mới
+- **Thống kê Status Bar mở rộng + tùy chỉnh** (Spec 11.2):
+  - Thêm **Đếm số (Numerical Count) / Nhỏ nhất (Min) / Lớn nhất (Max)** bên cạnh
+    Trung bình / Đếm / Tổng.
+  - **Chuột phải vào thanh trạng thái** → menu bật/tắt từng item, **lưu QSettings**
+    (mở lại app vẫn nhớ). Mặc định bật Trung bình / Đếm / Tổng như Excel.
+  - Quy ước giống Excel: **Đếm** gồm cả ô chữ & TRUE/FALSE; **Tổng/Trung
+    bình/Min/Max/Đếm số** chỉ tính ô SỐ (bỏ chữ và boolean).
+
+### Sửa
+- Thống kê đa vùng (Ctrl+Click chọn nhiều vùng rời) giờ tính **đúng các ô được
+  chọn**, không gộp cả bounding box (trước đây đếm lẫn ô không chọn).
+- Số lớn không còn hiện ký hiệu khoa học (`1234567` thay vì `1.23457e+06`).
+
+### Kỹ thuật
+- Tách logic thuần `statusbar_stats.py` (`compute_stats` + `format_stat_value`),
+  duyệt một lượt theo range (không cấp phát list, không quét ô ngoài vùng chọn) —
+  giữ hot path nhẹ. Thêm public `model.cell_value()`. 16 test mới (unit + integ).
+
 ## [0.12.2] - 2026-06-03
 
 ### Thêm mới

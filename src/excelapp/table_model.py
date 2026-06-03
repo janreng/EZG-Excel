@@ -176,6 +176,10 @@ class SpreadsheetModel(QAbstractTableModel):
                 return shown
         return _format(value)
 
+    def cell_value(self, row: int, col: int):
+        """Giá trị đã tính của ô (public). Dùng cho status bar / tính toán ngoài."""
+        return self._cell_value(row, col)
+
     def _cell_value(self, row: int, col: int):
         """Giá trị đã tính của ô (số/chuỗi). Có cache và phát hiện vòng lặp."""
         key = (row, col)

@@ -6,7 +6,7 @@ import os
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QThread, Signal
+from PySide6.QtCore import QEvent, QSettings, Qt, QThread, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
+from . import statusbar_stats as sbstats
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .freeze import FreezeManager
 from .i18n import current_lang, load_lang, set_lang, tr
@@ -187,6 +188,7 @@ class MainWindow(QMainWindow):
         self._updating_toolbar = False
         self._fx_picking = False  # True khi đang soạn công thức (bấm ô chèn ref)
         self._cell_mode = CellMode.READY  # Spec 03 — khởi tạo sớm trước khi nối signal
+        self._stat_items = self._load_stat_items()  # Spec 11.2 — item nào hiện ở status bar
         self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
 
         if os.path.exists(icon_path()):
@@ -404,6 +406,13 @@ class MainWindow(QMainWindow):
         self._stats_label = QLabel("")
         self._stats_label.setStyleSheet("QLabel { color: #595959; font-size: 12px; padding: 0 8px; }")
         self.statusBar().addPermanentWidget(self._stats_label)
+        # Right-click status bar -> bật/tắt item thống kê (Spec 11.2), lưu QSettings.
+        self.statusBar().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.statusBar().customContextMenuRequested.connect(self._show_statusbar_menu)
+        self._stats_label.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._stats_label.customContextMenuRequested.connect(
+            lambda pos: self._show_statusbar_menu(self._stats_label.mapTo(self.statusBar(), pos))
+        )
         self._version_label = QLabel(f"  {APP_NAME} v{__version__}  ")
         self._version_label.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
         self.statusBar().addPermanentWidget(self._version_label)
@@ -1216,31 +1225,85 @@ class MainWindow(QMainWindow):
         self.view.setFocus()
 
     # ------------------------------------------------------------ status bar thống kê
+    # ------------------------------------------------------------ status bar stats (Spec 11.2)
+    def _stat_settings(self) -> QSettings:
+        return QSettings("PyExcel", "PyExcel")
+
+    def _load_stat_items(self) -> dict[str, bool]:
+        """Đọc item thống kê bật/tắt từ QSettings (mặc định giống Excel)."""
+        s = self._stat_settings()
+        items: dict[str, bool] = {}
+        for key, default in sbstats.DEFAULT_ENABLED.items():
+            raw = s.value(f"statusbar/{key}", default)
+            # QSettings trả str "true"/"false" trên một số nền.
+            items[key] = raw if isinstance(raw, bool) else str(raw).lower() == "true"
+        return items
+
+    _STAT_LABEL_KEYS = {
+        sbstats.ITEM_AVERAGE: "stat_average",
+        sbstats.ITEM_COUNT: "stat_count",
+        sbstats.ITEM_NUMERICAL_COUNT: "stat_numerical_count",
+        sbstats.ITEM_MIN: "stat_min",
+        sbstats.ITEM_MAX: "stat_max",
+        sbstats.ITEM_SUM: "stat_sum",
+    }
+
+    def _show_statusbar_menu(self, pos) -> None:
+        """Menu chuột phải: bật/tắt từng item thống kê (lưu QSettings)."""
+        menu = QMenu(self)
+        title = menu.addAction(tr("statusbar_customize"))
+        title.setEnabled(False)
+        menu.addSeparator()
+        for item in sbstats.STAT_ITEMS:
+            act = menu.addAction(tr(self._STAT_LABEL_KEYS[item]))
+            act.setCheckable(True)
+            act.setChecked(self._stat_items.get(item, False))
+            act.toggled.connect(lambda on, it=item: self._toggle_stat_item(it, on))
+        menu.exec(self.statusBar().mapToGlobal(pos))
+
+    def _toggle_stat_item(self, item: str, on: bool) -> None:
+        self._stat_items[item] = on
+        self._stat_settings().setValue(f"statusbar/{item}", on)
+        self._update_stats()
+
     def _update_stats(self) -> None:
-        """Cập nhật SUM / AVERAGE / COUNT khi selection thay đổi."""
-        box = self._selection_box()
-        if box is None:
+        """Cập nhật thống kê vùng chọn (Average/Count/Sum/Min/Max...) khi đổi vùng.
+
+        Duyệt đúng các vùng đã chọn (không phải bounding box) -> đa vùng Ctrl+Click
+        cho số liệu chuẩn như Excel, và không quét ô không được chọn.
+        """
+        sm = self.view.selectionModel()
+        sel = sm.selection() if sm else None
+        if not sel or sel.isEmpty():
             self._stats_label.setText("")
             return
-        top, left, bottom, right = box
-        n_cells = (bottom - top + 1) * (right - left + 1)
+        n_cells = sum(
+            (r.bottom() - r.top() + 1) * (r.right() - r.left() + 1) for r in sel
+        )
         if n_cells <= 1:
             self._stats_label.setText("")
             return
-        values = []
-        for r in range(top, bottom + 1):
-            for c in range(left, right + 1):
-                v = self.model._cell_value(r, c)
-                if isinstance(v, (int, float)) and not isinstance(v, bool):
-                    values.append(float(v))
-        if values:
-            s = sum(values)
-            avg = s / len(values)
-            self._stats_label.setText(
-                f"Trung bình: {avg:g}    Số lượng: {len(values)}    Tổng: {s:g}"
-            )
-        else:
-            self._stats_label.setText(f"Số lượng: {n_cells}")
+        cell_value = self.model.cell_value
+        values = (
+            cell_value(r, c)
+            for rng in sel
+            for r in range(rng.top(), rng.bottom() + 1)
+            for c in range(rng.left(), rng.right() + 1)
+        )
+        stats = sbstats.compute_stats(values)
+        if stats.count == 0:
+            self._stats_label.setText("")
+            return
+        parts = []
+        for item in sbstats.STAT_ITEMS:
+            if not self._stat_items.get(item):
+                continue
+            val = stats.value(item)
+            if val is None:
+                continue
+            label = tr(self._STAT_LABEL_KEYS[item])
+            parts.append(f"{label}: {sbstats.format_stat_value(val)}")
+        self._stats_label.setText("    ".join(parts))
 
     def _sync_toolbar(self, row: int, col: int) -> None:
         """Cập nhật trạng thái toolbar theo định dạng ô hiện tại."""

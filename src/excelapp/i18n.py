@@ -194,6 +194,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "mode_enter": {"vi": "Nhập", "en": "Enter"},
     "mode_edit": {"vi": "Chỉnh sửa", "en": "Edit"},
     "mode_point": {"vi": "Trỏ", "en": "Point"},
+    # --- Status Bar statistics (Spec 11.2) ---
+    "stat_average": {"vi": "Trung bình", "en": "Average"},
+    "stat_count": {"vi": "Đếm", "en": "Count"},
+    "stat_numerical_count": {"vi": "Đếm số", "en": "Numerical Count"},
+    "stat_min": {"vi": "Nhỏ nhất", "en": "Min"},
+    "stat_max": {"vi": "Lớn nhất", "en": "Max"},
+    "stat_sum": {"vi": "Tổng", "en": "Sum"},
+    "statusbar_customize": {"vi": "Tùy chỉnh thanh trạng thái", "en": "Customize Status Bar"},
     # --- định dạng có điều kiện ---
     "cond_tip": {"vi": "Định dạng có điều kiện", "en": "Conditional formatting"},
     "cond_add": {"vi": "Thêm quy tắc...", "en": "Add rule..."},
