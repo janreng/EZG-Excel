@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.14.2] - 2026-06-03
+
+### Thêm mới
+- **Menu chuột phải trên tiêu đề dòng/cột**: bấm phải vào tiêu đề để Chèn / Xóa /
+  Ẩn / Hiện / Dãn vừa nội dung ngay tại dòng-cột đó.
+- **Dãn vừa nội dung (AutoFit)** cho cột và dòng đang chọn — cũng có trong menu Cấu trúc.
+
 ## [0.14.1] - 2026-06-03
 
 ### Thêm mới

@@ -342,6 +342,13 @@ class MainWindow(QMainWindow):
         self.view.verticalHeader().sectionClicked.connect(self.view.selectRow)
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._show_context_menu)
+        # Chuột phải trên tiêu đề cột/hàng -> menu thao tác riêng.
+        hh = self.view.horizontalHeader()
+        vh = self.view.verticalHeader()
+        hh.setContextMenuPolicy(Qt.CustomContextMenu)
+        vh.setContextMenuPolicy(Qt.CustomContextMenu)
+        hh.customContextMenuRequested.connect(self._col_header_menu)
+        vh.customContextMenuRequested.connect(self._row_header_menu)
         self.view.horizontalHeader().filterClicked.connect(self._open_filter_dialog)
         # Soạn công thức: bấm ô để chèn tham chiếu (như Excel).
         self.view.formula_pick_active = lambda: self._fx_picking
@@ -894,6 +901,9 @@ class MainWindow(QMainWindow):
         self._add_action(struct_menu, tr("hide_rows"), self.hide_rows)
         self._add_action(struct_menu, tr("hide_cols"), self.hide_cols)
         self._add_action(struct_menu, tr("unhide"), self.unhide_selection)
+        struct_menu.addSeparator()
+        self._add_action(struct_menu, tr("autofit_col"), self.autofit_cols)
+        self._add_action(struct_menu, tr("autofit_row"), self.autofit_rows)
 
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
@@ -1618,6 +1628,59 @@ class MainWindow(QMainWindow):
         for c in cols:
             self.view.setColumnHidden(c, False)
         self.view.viewport().update()
+
+    def autofit_cols(self) -> None:
+        """Dãn cột vừa nội dung cho các cột đang chọn."""
+        _, cols = self._selected_rows_cols()
+        for c in cols:
+            self.view.resizeColumnToContents(c)
+
+    def autofit_rows(self) -> None:
+        """Dãn dòng vừa nội dung cho các dòng đang chọn."""
+        rows, _ = self._selected_rows_cols()
+        for r in rows:
+            self.view.resizeRowToContents(r)
+
+    # ------------------------------------------------------------ menu chuột phải tiêu đề
+    def _col_header_menu(self, pos) -> None:
+        col = self.view.horizontalHeader().logicalIndexAt(pos)
+        if col < 0:
+            return
+        # Bấm phải ngoài vùng chọn -> chọn cả cột đó. Nếu đã trong vùng chọn thì
+        # vẫn neo ô hiện hành về cột này để Chèn/Xóa đúng cột vừa bấm.
+        if col not in self._selected_rows_cols()[1]:
+            self.view.selectColumn(col)
+        else:
+            self.view.setCurrentIndex(self.model.index(0, col))
+        menu = QMenu(self)
+        menu.setStyleSheet(MENU_QSS)
+        self._add_action(menu, tr("insert_col"), self.insert_col_left)
+        self._add_action(menu, tr("insert_col_right"), self.insert_col_right)
+        self._add_action(menu, tr("delete_col"), self.delete_col)
+        menu.addSeparator()
+        self._add_action(menu, tr("hide_cols"), self.hide_cols)
+        self._add_action(menu, tr("unhide"), self.unhide_selection)
+        self._add_action(menu, tr("autofit_col"), self.autofit_cols)
+        menu.exec(self.view.horizontalHeader().mapToGlobal(pos))
+
+    def _row_header_menu(self, pos) -> None:
+        row = self.view.verticalHeader().logicalIndexAt(pos)
+        if row < 0:
+            return
+        if row not in self._selected_rows_cols()[0]:
+            self.view.selectRow(row)
+        else:
+            self.view.setCurrentIndex(self.model.index(row, 0))
+        menu = QMenu(self)
+        menu.setStyleSheet(MENU_QSS)
+        self._add_action(menu, tr("insert_row"), self.insert_row_above)
+        self._add_action(menu, tr("insert_row_below"), self.insert_row_below)
+        self._add_action(menu, tr("delete_row"), self.delete_row)
+        menu.addSeparator()
+        self._add_action(menu, tr("hide_rows"), self.hide_rows)
+        self._add_action(menu, tr("unhide"), self.unhide_selection)
+        self._add_action(menu, tr("autofit_row"), self.autofit_rows)
+        menu.exec(self.view.verticalHeader().mapToGlobal(pos))
 
     # ------------------------------------------------------------ điền (fill)
     def _selection_box(self):

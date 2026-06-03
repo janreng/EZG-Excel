@@ -39,6 +39,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "hide_rows": {"vi": "Ẩn dòng", "en": "Hide rows"},
     "hide_cols": {"vi": "Ẩn cột", "en": "Hide columns"},
     "unhide": {"vi": "Hiện lại (trong vùng chọn)", "en": "Unhide (in selection)"},
+    "autofit_col": {"vi": "Dãn cột vừa nội dung", "en": "Auto-fit column width"},
+    "autofit_row": {"vi": "Dãn dòng vừa nội dung", "en": "Auto-fit row height"},
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
