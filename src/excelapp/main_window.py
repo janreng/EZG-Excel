@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 
 from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
 from . import statusbar_stats as sbstats
+from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
 from .freeze import FreezeManager
 from .i18n import current_lang, load_lang, set_lang, tr
@@ -846,6 +847,8 @@ class MainWindow(QMainWindow):
 
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
+        self._add_action(data_menu, tr("autosum"), self._autosum, QKeySequence("Alt+="))
+        data_menu.addSeparator()
         self._cmd_action(data_menu, "find", self.show_find)
         self._cmd_action(data_menu, "replace", self.show_replace)
         data_menu.addSeparator()
@@ -1334,6 +1337,27 @@ class MainWindow(QMainWindow):
         self._hide_formula_buttons()
         self._apply_mode_event(ModeEvent.COMMIT)
         self.view.setFocus()
+
+    def _autosum(self) -> None:
+        """AutoSum (Alt+=): chèn =SUM dải số liền kề (trên hoặc trái) vào ô hiện tại.
+
+        Có dải -> commit luôn `=SUM(range)`. Không có dải liền kề -> đưa `=SUM()`
+        vào thanh công thức, đặt con trỏ trong ngoặc để user tự chọn vùng (Excel
+        cũng vậy).
+        """
+        idx = self.view.currentIndex()
+        if not idx.isValid():
+            return
+        f = autosum_formula(self.model.cell_value, idx.row(), idx.column())
+        if f is None:
+            self.formula_edit.setText("=SUM()")
+            self.formula_edit.setFocus()
+            self.formula_edit.setCursorPosition(len("=SUM("))
+            self._on_formula_edited("=SUM()")  # hiện nút ✓/✗ + bật chọn ô
+            return
+        self.model.setData(idx, f, Qt.EditRole)
+        self.formula_edit.setText(f)
+        self.view.setFocus()  # trả focus về lưới để mũi tên di chuyển ô tiếp
 
     # ------------------------------------------------------------ thao tác tệp
     def new_file(self) -> None:

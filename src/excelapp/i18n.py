@@ -38,6 +38,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "delete_col": {"vi": "Xóa cột", "en": "Delete column"},
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
+    "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
     "find": {"vi": "Tìm kiếm", "en": "Find"},
     "replace": {"vi": "Tìm & thay thế", "en": "Find & Replace"},
     "sort_asc": {"vi": "Sắp xếp tăng dần", "en": "Sort ascending"},

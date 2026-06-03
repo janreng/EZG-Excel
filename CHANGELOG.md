@@ -6,64 +6,43 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.4] - 2026-06-03
+
+### Thêm mới
+- **AutoSum (Alt+=)**: bấm `Alt` + `=` để tự chèn `=SUM(...)` cho dải số ngay
+  phía trên ô (hoặc bên trái nếu trên không có số). Nếu không có dải số liền kề,
+  ô để sẵn `=SUM()` cho bạn tự quét vùng. Có trong menu Dữ liệu.
+
 ## [0.12.3] - 2026-06-03
 
 ### Thêm mới
-- **Thống kê Status Bar mở rộng + tùy chỉnh** (Spec 11.2):
-  - Thêm **Đếm số (Numerical Count) / Nhỏ nhất (Min) / Lớn nhất (Max)** bên cạnh
-    Trung bình / Đếm / Tổng.
-  - **Chuột phải vào thanh trạng thái** → menu bật/tắt từng item, **lưu QSettings**
-    (mở lại app vẫn nhớ). Mặc định bật Trung bình / Đếm / Tổng như Excel.
-  - Quy ước giống Excel: **Đếm** gồm cả ô chữ & TRUE/FALSE; **Tổng/Trung
-    bình/Min/Max/Đếm số** chỉ tính ô SỐ (bỏ chữ và boolean).
+- **Thanh trạng thái thống kê đầy đủ hơn**: thêm **Đếm số / Nhỏ nhất / Lớn nhất**
+  bên cạnh Trung bình / Đếm / Tổng.
+- **Chuột phải vào thanh trạng thái** để bật/tắt từng mục thống kê; lựa chọn được
+  ghi nhớ cho lần mở sau. Mặc định bật Trung bình / Đếm / Tổng.
+- Cách tính giống Excel: **Đếm** tính cả ô chữ và TRUE/FALSE; còn **Tổng / Trung
+  bình / Nhỏ nhất / Lớn nhất / Đếm số** chỉ tính trên ô số.
 
 ### Sửa
-- Thống kê đa vùng (Ctrl+Click chọn nhiều vùng rời) giờ tính **đúng các ô được
-  chọn**, không gộp cả bounding box (trước đây đếm lẫn ô không chọn).
-- Số lớn không còn hiện ký hiệu khoa học (`1234567` thay vì `1.23457e+06`).
-
-### Kỹ thuật
-- Tách logic thuần `statusbar_stats.py` (`compute_stats` + `format_stat_value`),
-  duyệt một lượt theo range (không cấp phát list, không quét ô ngoài vùng chọn) —
-  giữ hot path nhẹ. Thêm public `model.cell_value()`. 16 test mới (unit + integ).
+- Chọn nhiều vùng rời bằng Ctrl+Click giờ cho số liệu đúng các ô đã chọn.
+- Số lớn hiển thị đầy đủ (`1234567`) thay vì dạng rút gọn `1.23457e+06`.
 
 ## [0.12.2] - 2026-06-03
 
 ### Thêm mới
-- **Cell Mode indicator kiểu Excel** (Spec 03, Phase 1): thanh trạng thái góc
-  trái hiển thị mode hiện tại — **Sẵn sàng / Nhập / Chỉnh sửa / Trỏ**
-  (Ready / Enter / Edit / Point):
-  - Gõ ký tự vào ô → **Nhập (Enter)**; F2 / double-click ô có data → **Chỉnh
-    sửa (Edit)**; chọn ô làm tham chiếu khi soạn công thức → **Trỏ (Point)**;
-    commit / Esc / di chuyển ô → **Sẵn sàng (Ready)**.
-  - State machine tách module thuần `cell_mode.py` (`CellMode` + `transition()`),
-    19 unit test bám bảng chuyển trạng thái Spec 03.
-  - Esc khi đang sửa: hủy toàn bộ về Ready (đúng Excel — không có bước trung gian).
-
-### Ghi chú
-- Bản này làm **indicator + state machine** (gốc của mọi keyboard behavior).
-  Phần Point mode dùng **phím mũi tên** để chọn/mở rộng tham chiếu (gõ `=` rồi ↑↓)
-  còn hoãn sang bản sau — hiện Point kích hoạt qua **click ô** khi soạn công thức.
+- **Hiển thị chế độ ô ở thanh trạng thái** (góc trái), giống Excel:
+  - **Sẵn sàng** khi đang di chuyển; **Nhập** khi vừa gõ vào ô; **Chỉnh sửa** khi
+    F2 / nhấp đúp ô có dữ liệu; **Trỏ** khi chọn ô làm tham chiếu lúc soạn công thức.
+  - Nhấn Enter / Esc / chuyển ô để quay về **Sẵn sàng** (một lần Esc hủy cả chỉnh
+    sửa, đúng như Excel).
 
 ## [0.12.1] - 2026-06-03
 
 ### Thêm mới
-- **Name Box "Go To" kiểu Excel** (Spec 04, Phase 1):
-  - Gõ địa chỉ vào Name Box rồi Enter để nhảy tới: ô đơn `A1`/`$A$1`,
-    vùng ô `A1:C5` (tự chuẩn hóa nếu đảo ngược `C5:A1`), cả cột `A:A`/`A:C`,
-    cả hàng `1:1`/`2:5`. Không phân biệt hoa thường, chấp nhận dấu `$`.
-  - Tham chiếu vượt lưới được kẹp về biên; tham chiếu sai cú pháp hoặc nằm
-    hoàn toàn ngoài lưới → hộp thoại "Tham chiếu không hợp lệ.", giữ nguyên ô
-    đang chọn.
-  - **F5** và **Ctrl+G** = Go To: đưa con trỏ vào Name Box và bôi đen sẵn.
-  - **Esc** trong Name Box: bỏ chỉnh sửa, khôi phục địa chỉ ô, trả focus về lưới.
-  - Bộ phân tích tham chiếu (`formula.parse_grid_reference`) là hàm thuần,
-    regex compile-once (không cấp phát thừa trên hot path), 25 unit test.
-
-### Ghi chú
-- Named range, vùng rời rạc (`A1:B3,D5`) và tham chiếu chéo sheet (`Sheet2!A1`)
-  trong Name Box: dời sang Phase sau (cần Spec 31 + lớp vẽ đa vùng + multi-sheet).
-  Hiện các dạng này hiển thị hộp thoại lỗi thay vì crash.
+- **Ô địa chỉ "Đi tới" (Name Box) giống Excel**: gõ địa chỉ rồi Enter để nhảy tới
+  ô đơn `A1`, vùng `A1:C5` (gõ ngược `C5:A1` cũng được), cả cột `A:A`, cả hàng
+  `1:1`. Tham chiếu sai sẽ báo "Tham chiếu không hợp lệ." và giữ nguyên ô đang chọn.
+- **F5** hoặc **Ctrl+G** để nhảy nhanh vào ô địa chỉ; **Esc** để hủy.
 
 ## [0.12.0] - 2026-06-02
 
