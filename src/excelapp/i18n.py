@@ -39,6 +39,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
+    "show_formulas": {"vi": "Hiện công thức", "en": "Show Formulas"},
     "find": {"vi": "Tìm kiếm", "en": "Find"},
     "replace": {"vi": "Tìm & thay thế", "en": "Find & Replace"},
     "sort_asc": {"vi": "Sắp xếp tăng dần", "en": "Sort ascending"},

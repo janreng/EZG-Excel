@@ -44,6 +44,7 @@ class SpreadsheetModel(QAbstractTableModel):
         self._data: list[list[str]] = rows or [[""] * 26 for _ in range(50)]
         self._merges: list[tuple[int, int, int, int]] = []  # vùng ô gộp
         self._cond_rules: list[dict] = []  # quy tắc định dạng có điều kiện
+        self._show_formulas = False  # Ctrl+` — hiện công thức thay vì kết quả
         self._eval_cache: dict[tuple[int, int], object] = {}
         self._computing: set[tuple[int, int]] = set()
         self._fmt: dict[tuple[int, int], dict] = {}  # định dạng theo ô
@@ -76,6 +77,8 @@ class SpreadsheetModel(QAbstractTableModel):
         if role == Qt.EditRole:
             return raw  # khi sửa thì hiện công thức gốc
         if role == Qt.DisplayRole:
+            if self._show_formulas:
+                return raw  # hiện đúng nội dung gốc (công thức/số/chữ như đã gõ)
             return self._display_value(row, col)
         if role == Qt.TextAlignmentRole:
             return int(self._alignment(row, col))
@@ -96,6 +99,22 @@ class SpreadsheetModel(QAbstractTableModel):
             color = self._fmt.get((row, col), {}).get("color")
             return QColor(color) if color else None
         return None
+
+    # ------------------------------------------------------------ hiện công thức (Ctrl+`)
+    def show_formulas(self) -> bool:
+        return self._show_formulas
+
+    def set_show_formulas(self, on: bool) -> None:
+        """Bật/tắt hiện công thức gốc thay vì kết quả; refresh toàn lưới."""
+        on = bool(on)
+        if on == self._show_formulas:
+            return
+        self._show_formulas = on
+        rows, cols = self.rowCount(), self.columnCount()
+        if rows and cols:
+            self.dataChanged.emit(
+                self.index(0, 0), self.index(rows - 1, cols - 1), [Qt.DisplayRole]
+            )
 
     # ------------------------------------------------------------ điều kiện
     def _matching_rule(self, row: int, col: int):

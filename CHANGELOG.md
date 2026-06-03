@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.5] - 2026-06-03
+
+### Thêm mới
+- **Hiện công thức (Ctrl+`)**: bật/tắt xem công thức gốc thay vì kết quả trên cả
+  trang tính — tiện rà soát công thức. Có trong menu Xem → "Hiện công thức". Mỗi
+  sheet nhớ riêng trạng thái bật/tắt.
+
 ## [0.12.4] - 2026-06-03
 
 ### Thêm mới

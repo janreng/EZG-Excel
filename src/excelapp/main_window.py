@@ -861,6 +861,15 @@ class MainWindow(QMainWindow):
         # --- Xem (Freeze) ---
         view_menu = menubar.addMenu(tr("menu_view"))
         self._build_freeze_menu(view_menu)
+        view_menu.addSeparator()
+        self.act_show_formulas = QAction(tr("show_formulas"), self)
+        self.act_show_formulas.setCheckable(True)
+        self.act_show_formulas.setShortcut(QKeySequence("Ctrl+`"))
+        self.act_show_formulas.setChecked(
+            self.model.show_formulas() if hasattr(self, "model") else False
+        )
+        self.act_show_formulas.toggled.connect(self._toggle_show_formulas)
+        view_menu.addAction(self.act_show_formulas)
 
         # --- Cài đặt ---
         settings_menu = menubar.addMenu(tr("menu_settings"))
@@ -953,6 +962,19 @@ class MainWindow(QMainWindow):
         self._apply_filters()
         self.view.horizontalHeader().refresh(set(self._filters.keys()))
         self.view.setCurrentIndex(self.model.index(0, 0))
+        self._sync_show_formulas_check()  # đồng bộ tick "Hiện công thức" theo sheet mới
+
+    def _sync_show_formulas_check(self) -> None:
+        """Cập nhật tick menu theo trạng thái show-formulas của model hiện tại.
+
+        Chặn signal để tránh kích lại ``_toggle_show_formulas`` (gây lật ngược).
+        """
+        act = getattr(self, "act_show_formulas", None)
+        if act is None:
+            return
+        act.blockSignals(True)
+        act.setChecked(self.model.show_formulas())
+        act.blockSignals(False)
 
     def _unique_sheet_name(self) -> str:
         existing = {s.name for s in self.sheets}
@@ -1358,6 +1380,10 @@ class MainWindow(QMainWindow):
         self.model.setData(idx, f, Qt.EditRole)
         self.formula_edit.setText(f)
         self.view.setFocus()  # trả focus về lưới để mũi tên di chuyển ô tiếp
+
+    def _toggle_show_formulas(self, on: bool) -> None:
+        """Ctrl+` — bật/tắt hiện công thức gốc thay vì kết quả trên toàn sheet."""
+        self.model.set_show_formulas(on)
 
     # ------------------------------------------------------------ thao tác tệp
     def new_file(self) -> None:
