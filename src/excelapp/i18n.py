@@ -40,6 +40,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
     "show_formulas": {"vi": "Hiện công thức", "en": "Show Formulas"},
+    "zoom_reset_tip": {
+        "vi": "Mức phóng to — bấm để về 100% (Ctrl + lăn chuột để phóng)",
+        "en": "Zoom level — click to reset to 100% (Ctrl + scroll to zoom)",
+    },
     "find": {"vi": "Tìm kiếm", "en": "Find"},
     "replace": {"vi": "Tìm & thay thế", "en": "Find & Replace"},
     "sort_asc": {"vi": "Sắp xếp tăng dần", "en": "Sort ascending"},

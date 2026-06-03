@@ -122,6 +122,19 @@ class CellDelegate(QStyledItemDelegate):
 
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
+        # Zoom: scale cỡ chữ theo mức phóng to của view (mọi ô, kể cả font riêng).
+        z = self._view.zoom_factor()
+        if z != 1.0:
+            f = option.font
+            pt = f.pointSizeF()
+            if pt > 0:
+                f.setPointSizeF(pt * z)
+                option.font = f
+            else:  # font đặt theo pixel -> vẫn scale để khỏi lệch khi zoom
+                px = f.pixelSize()
+                if px > 0:
+                    f.setPixelSize(max(1, round(px * z)))
+                    option.font = f
         model = self._view.model()
         if model is None:
             return
@@ -167,6 +180,8 @@ class SpreadsheetView(QTableView):
     # Phát khi bắt đầu sửa ô trong lưới: True = gõ ký tự (ENTER mode),
     # False = F2/double-click ô có sẵn (EDIT mode). Dùng cho indicator Cell Mode.
     editStarted = Signal(bool)
+    # Phát khi mức zoom đổi (phần trăm) — status bar cập nhật nhãn.
+    zoomChanged = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -192,8 +207,12 @@ class SpreadsheetView(QTableView):
             "  background-color: #F3F3F3; border: none;"
             "  border-right: 1px solid #D0D0D0; border-bottom: 1px solid #D0D0D0; }"
         )
-        self.verticalHeader().setDefaultSectionSize(20)
-        self.horizontalHeader().setDefaultSectionSize(64)
+        self._base_row = 20
+        self._base_col = 64
+        self.verticalHeader().setDefaultSectionSize(self._base_row)
+        self.horizontalHeader().setDefaultSectionSize(self._base_col)
+        self._zoom = 1.0  # mức phóng to (Ctrl+lăn chuột), 1.0 = 100%
+        self._wheel_accum = 0  # gom delta lăn -> chuột mượt/trackpad không nhảy vọt
         self._filling = False
         self._src: tuple[int, int, int, int] | None = None
         self._dst: tuple[int, int, int, int] | None = None
@@ -350,6 +369,40 @@ class SpreadsheetView(QTableView):
         v.blockSignals(False)
         self.model().move_row(old_visual, new_visual)
         self.select_box((new_visual, 0, new_visual, self.model().columnCount() - 1))
+
+    # ------------------------------------------------------------ zoom (Ctrl+lăn)
+    def zoom_factor(self) -> float:
+        return self._zoom
+
+    def zoom_percent(self) -> int:
+        return round(self._zoom * 100)
+
+    def set_zoom(self, percent: int) -> None:
+        """Đặt mức phóng to 10–400%. Scale cỡ chữ (qua delegate) + cỡ hàng/cột mặc định."""
+        percent = max(10, min(400, int(percent)))
+        z = percent / 100.0
+        if abs(z - self._zoom) < 1e-6:
+            return
+        self._zoom = z
+        self.verticalHeader().setDefaultSectionSize(max(8, round(self._base_row * z)))
+        self.horizontalHeader().setDefaultSectionSize(max(16, round(self._base_col * z)))
+        self.viewport().update()
+        self.zoomChanged.emit(self.zoom_percent())
+
+    def wheelEvent(self, event):
+        # Ctrl + lăn chuột -> zoom (như Excel), không cuộn. Gom delta theo từng nấc
+        # 120 (chuột thường = 1 nấc/lần; trackpad/chuột mượt gửi nhiều delta nhỏ ->
+        # không nhảy vọt thẳng tới min/max).
+        if event.modifiers() & Qt.ControlModifier:
+            self._wheel_accum += event.angleDelta().y()
+            steps = int(self._wheel_accum / 120)
+            if steps:
+                self._wheel_accum -= steps * 120
+                self.set_zoom(self.zoom_percent() + steps * 10)
+            event.accept()
+            return
+        self._wheel_accum = 0
+        super().wheelEvent(event)
 
     # ------------------------------------------------------------ bắt đầu sửa ô
     def edit(self, index, trigger, event):

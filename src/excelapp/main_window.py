@@ -415,6 +415,18 @@ class MainWindow(QMainWindow):
         self._stats_label.customContextMenuRequested.connect(
             lambda pos: self._show_statusbar_menu(self._stats_label.mapTo(self.statusBar(), pos))
         )
+        # Zoom indicator (Spec 11.3): hiện % phóng to; bấm để về 100%.
+        self._zoom_btn = QToolButton()
+        self._zoom_btn.setText(f"{self.view.zoom_percent()}%")
+        self._zoom_btn.setToolTip(tr("zoom_reset_tip"))
+        self._zoom_btn.setAutoRaise(True)
+        self._zoom_btn.setStyleSheet(
+            "QToolButton { color: #595959; font-size: 12px; padding: 0 8px; border: none; }"
+            "QToolButton:hover { background: #E5E5E5; }"
+        )
+        self._zoom_btn.clicked.connect(lambda: self.view.set_zoom(100))
+        self.statusBar().addPermanentWidget(self._zoom_btn)
+        self.view.zoomChanged.connect(lambda pct: self._zoom_btn.setText(f"{pct}%"))
         self._version_label = QLabel(f"  {APP_NAME} v{__version__}  ")
         self._version_label.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
         self.statusBar().addPermanentWidget(self._version_label)

@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.8] - 2026-06-03
+
+### Thêm mới
+- **Phóng to / thu nhỏ trang tính (Zoom)**: giữ **Ctrl + lăn chuột** để phóng to
+  hoặc thu nhỏ bảng tính (10%–400%). Mức phóng hiện ở góc phải thanh trạng thái —
+  bấm vào đó để về 100%.
+
 ## [0.12.7] - 2026-06-03
 
 ### Sửa
