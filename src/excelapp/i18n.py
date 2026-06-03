@@ -48,6 +48,17 @@ STRINGS: dict[str, dict[str, str]] = {
     "ungroup_cols": {"vi": "Bỏ nhóm cột", "en": "Ungroup columns"},
     "toggle_group_rows": {"vi": "Gập / mở nhóm dòng", "en": "Collapse / expand rows"},
     "toggle_group_cols": {"vi": "Gập / mở nhóm cột", "en": "Collapse / expand columns"},
+    "table_create": {"vi": "Tạo bảng (Ctrl+T)", "en": "Create table (Ctrl+T)"},
+    "table_total_row": {"vi": "Bật / tắt hàng Tổng", "en": "Toggle total row"},
+    "table_remove": {"vi": "Bỏ bảng", "en": "Remove table"},
+    "table_created": {"vi": "Đã tạo bảng", "en": "Table created"},
+    "table_overlap": {"vi": "Vùng chồng lấn bảng có sẵn", "en": "Range overlaps an existing table"},
+    "not_in_table": {"vi": "Ô không nằm trong bảng nào", "en": "Cell is not in a table"},
+    "total_label": {"vi": "Tổng", "en": "Total"},
+    "total_row_busy": {
+        "vi": "Dòng dưới bảng đang có dữ liệu — không thể thêm hàng Tổng.",
+        "en": "The row below the table is not empty — cannot add a total row.",
+    },
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},

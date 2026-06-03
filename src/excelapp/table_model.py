@@ -62,10 +62,19 @@ class SpreadsheetModel(QAbstractTableModel):
         self._sheet_resolver = None       # Callable[[str], SpreadsheetModel | None]
         self._on_content_changed = None   # Callable[[], None]
         self._external_cells: set[tuple[int, int]] = set()  # ô có tham chiếu chéo sheet
-        self._rebuild_deps()
+        self._tables = None               # TableModel của sheet (để delegate tô sọc)
         self._undo: list[tuple] = []
         self._redo: list[tuple] = []
         self._undo_limit = 100
+        self._rebuild_deps()
+
+    def table_band(self, row: int, col: int) -> bool:
+        """Ô có thuộc dòng sọc của một Bảng không (delegate hỏi để tô nền)."""
+        return self._tables is not None and self._tables.is_banded(row, col)
+
+    def cell_has_bg(self, row: int, col: int) -> bool:
+        """Ô có màu nền riêng không — kiểm tra không sao chép dict (dùng ở hot path vẽ)."""
+        return "bg" in self._fmt.get((row, col), ())
 
     # ------------------------------------------------------------ kích thước
     def rowCount(self, parent=QModelIndex()) -> int:

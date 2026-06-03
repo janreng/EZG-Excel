@@ -61,6 +61,7 @@ from .freeze import FreezeManager
 from .mini_toolbar import make_mini_toolbar
 from .outline import OutlineModel
 from .paste_dialog import PasteSpecialDialog
+from .table_obj import TableModel
 from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
 from .resources import icon_path
@@ -174,7 +175,7 @@ class _Sheet:
     """Một sheet trong workbook: model dữ liệu + state UI riêng (lọc, freeze)."""
 
     __slots__ = ("model", "name", "filters", "freeze_rows", "freeze_cols",
-                 "hidden_rows", "hidden_cols", "outline")
+                 "hidden_rows", "hidden_cols", "outline", "tables")
 
     def __init__(self, model, name: str, filters: dict | None = None):
         self.model = model
@@ -185,6 +186,8 @@ class _Sheet:
         self.hidden_rows: set[int] = set()   # dòng tự ẩn (riêng từng sheet)
         self.hidden_cols: set[int] = set()   # cột tự ẩn
         self.outline = OutlineModel()        # nhóm gập (riêng từng sheet)
+        self.tables = TableModel()           # các Bảng Ctrl+T (riêng từng sheet)
+        model._tables = self.tables          # delegate tô sọc theo bảng của sheet
 
 
 class MainWindow(QMainWindow):
@@ -978,6 +981,11 @@ class MainWindow(QMainWindow):
         data_menu.addSeparator()
         self._add_action(data_menu, tr("filter_menu"), self.show_filter)
         self._add_action(data_menu, tr("clear_filters"), self.clear_filters)
+        data_menu.addSeparator()
+        self._add_action(data_menu, tr("table_create"), self.create_table,
+                         QKeySequence("Ctrl+T"))
+        self._add_action(data_menu, tr("table_total_row"), self.toggle_total_row)
+        self._add_action(data_menu, tr("table_remove"), self.remove_table)
 
         # --- Xem (Freeze) ---
         view_menu = menubar.addMenu(tr("menu_view"))
@@ -1776,6 +1784,80 @@ class MainWindow(QMainWindow):
         _, cols = self._selected_rows_cols()
         if cols and self._outline.toggle_overlapping("col", min(cols), max(cols)):
             self._apply_col_visibility()
+
+    # ------------------------------------------------------------ Bảng (Ctrl+T)
+    def _active_tables(self) -> TableModel:
+        return self.sheets[self._active].tables
+
+    def _unique_table_name(self) -> str:
+        existing = {t.name for s in self.sheets for t in s.tables.tables}
+        i = 1
+        while f"Bang{i}" in existing:
+            i += 1
+        return f"Bang{i}"
+
+    def create_table(self) -> None:
+        """Ctrl+T: biến vùng đang chọn thành Bảng (tiêu đề đậm, sọc, có lọc)."""
+        box = self._selection_box()
+        if box is None:
+            return
+        top, left, _, right = box
+        tbl = self._active_tables().add(box, self._unique_table_name())
+        if tbl is None:
+            self.statusBar().showMessage(tr("table_overlap"), 3000)
+            return
+        self.model.set_format((top, left, top, right), bold=True)  # tiêu đề đậm
+        if not self.view.horizontalHeader().filter_enabled:
+            self.btn_filter.setChecked(True)  # bật nút lọc (Bảng có phễu)
+        self.view.viewport().update()
+        self.statusBar().showMessage(tr("table_created"), 2000)
+
+    def remove_table(self) -> None:
+        box = self._selection_box()
+        if box is None:
+            return
+        t = self._active_tables().remove_at(box[0], box[1])
+        if t is None:
+            self.statusBar().showMessage(tr("not_in_table"), 3000)
+            return
+        if t.total_row:
+            self.model.clear_range((t.total_row_index(), t.left, t.total_row_index(), t.right))
+        self.view.viewport().update()
+
+    def toggle_total_row(self) -> None:
+        """Bật/tắt hàng Tổng (SUM mỗi cột) ngay dưới Bảng."""
+        box = self._selection_box()
+        if box is None:
+            return
+        t = self._active_tables().table_at(box[0], box[1])
+        if t is None:
+            self.statusBar().showMessage(tr("not_in_table"), 3000)
+            return
+        trow = t.total_row_index()
+        if t.total_row:
+            self.model.clear_range((trow, t.left, trow, t.right))
+            t.total_row = False
+        else:
+            if trow >= self.model.rowCount():
+                self.model.insertRows(self.model.rowCount(),
+                                      trow - self.model.rowCount() + 1)
+            else:
+                # Không đè dữ liệu sẵn có ở dòng ngay dưới bảng.
+                busy = any(self.model._data[trow][c] != ""
+                           for c in range(t.left, t.right + 1))
+                if busy:
+                    self.statusBar().showMessage(tr("total_row_busy"), 3000)
+                    return
+            for c in range(t.left, t.right + 1):
+                letter = formula.col_index_to_letters(c)
+                # Tổng thân bảng: từ dòng dưới tiêu đề (top+2, 1-based) đến đáy bảng.
+                self.model.setData(
+                    self.model.index(trow, c),
+                    f"=SUM({letter}{t.top + 2}:{letter}{t.bottom + 1})",
+                )
+            self.model.setData(self.model.index(trow, t.left), tr("total_label"))
+            t.total_row = True
+        self.view.viewport().update()
 
     def autofit_cols(self) -> None:
         """Dãn cột vừa nội dung cho các cột đang chọn."""

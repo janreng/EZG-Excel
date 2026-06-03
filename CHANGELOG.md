@@ -6,6 +6,15 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.17.0] - 2026-06-03
+
+### Thêm mới
+- **Bảng (Ctrl+T)**: chọn một vùng rồi nhấn **Ctrl+T** để biến thành bảng — dòng
+  tiêu đề in đậm, **các dòng kẻ sọc xen kẽ** cho dễ đọc, và bật sẵn nút lọc.
+- **Hàng Tổng**: bật/tắt một hàng Tổng ngay dưới bảng, tự cộng (SUM) từng cột.
+- (Kẻ sọc của bảng áp dụng trong phiên làm việc; dòng tiêu đề đậm và công thức
+  hàng Tổng được lưu cùng tệp.)
+
 ## [0.16.0] - 2026-06-03
 
 ### Thêm mới

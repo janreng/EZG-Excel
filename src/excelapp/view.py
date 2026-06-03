@@ -85,8 +85,9 @@ class FilterHeaderView(QHeaderView):
                 return  # không sort/di chuyển khi bấm vào phễu
         super().mousePressEvent(event)
 
-_BLUE   = QColor("#217346")         # Excel green (selection border & handle)
+_BLUE   = QColor("#217346")         # selection border & handle (green)
 _WASH   = QColor(33, 115, 70, 25)  # lớp phủ xanh lá nhạt lên vùng chọn
+_BAND   = QColor("#F2F8F5")        # nền sọc xen kẽ cho thân Bảng (Ctrl+T)
 _HDR_SEL_BG = QColor("#FFFDE7")    # header highlight khi cột/hàng được chọn
 _HANDLE = 8                        # cạnh vùng bắt núm kéo (px)
 
@@ -149,6 +150,12 @@ class CellDelegate(QStyledItemDelegate):
         # ở SpreadsheetView.paintEvent nên nội dung ô vẫn nhìn rõ.
         option.state &= ~QStyle.State_Selected
         option.state &= ~QStyle.State_HasFocus
+        # Sọc xen kẽ của Bảng (Ctrl+T): vẽ nền nhạt khi ô không có màu nền riêng.
+        model = self._view.model()
+        if model is not None and hasattr(model, "table_band"):
+            if model.table_band(index.row(), index.column()) \
+                    and not model.cell_has_bg(index.row(), index.column()):
+                painter.fillRect(option.rect, _BAND)
         super().paint(painter, option, index)
         self._paint_borders(painter, option, index)
 
