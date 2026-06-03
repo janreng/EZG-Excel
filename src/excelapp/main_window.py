@@ -6,8 +6,17 @@ import os
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction, QActionGroup, QColor, QFont, QIcon, QKeySequence, QPalette
+from PySide6.QtCore import QEvent, Qt, QThread, Signal
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QColor,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QPalette,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -238,6 +247,7 @@ class MainWindow(QMainWindow):
             "QLineEdit#name_box:focus { border-color: #217346; }"
         )
         self.name_box.returnPressed.connect(self._navigate_to_name_box)
+        self.name_box.installEventFilter(self)  # Esc -> khôi phục, trả focus về lưới
         fb_layout.addWidget(self.name_box)
 
         # Separator dọc
@@ -300,6 +310,11 @@ class MainWindow(QMainWindow):
 
         # Giữ cell_label alias để code cũ không bị vỡ
         self.cell_label = self.name_box
+
+        # Go To: F5 và Ctrl+G focus Name Box (như Excel). App-wide.
+        for seq in ("F5", "Ctrl+G"):
+            sc = QShortcut(QKeySequence(seq), self)
+            sc.activated.connect(self._focus_name_box)
 
         # ---- Bảng lưới ----
         self.view = SpreadsheetView()
@@ -1096,28 +1111,52 @@ class MainWindow(QMainWindow):
         self._hide_formula_buttons()
         self.view.setFocus()
 
+    def eventFilter(self, obj, event):
+        """Esc trong Name Box: bỏ chỉnh sửa, khôi phục địa chỉ ô, trả focus về lưới."""
+        if obj is self.name_box and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Escape:
+                cur = self.view.currentIndex()
+                if cur.isValid():
+                    self.name_box.setText(
+                        formula.col_index_to_letters(cur.column()) + str(cur.row() + 1)
+                    )
+                self.view.setFocus()
+                return True
+        return super().eventFilter(obj, event)
+
+    def _focus_name_box(self) -> None:
+        """Go To (F5 / Ctrl+G): đưa con trỏ vào Name Box và bôi đen sẵn."""
+        self.name_box.setFocus()
+        self.name_box.selectAll()
+
     def _navigate_to_name_box(self) -> None:
-        """Name Box: khi Enter, nhảy tới địa chỉ ô được gõ (vd 'B3', 'A1:C5')."""
-        import re as _re
-        text = self.name_box.text().strip().upper()
-        # Thử parse vùng A1:C5
-        range_m = _re.fullmatch(r"([A-Z]+)(\d+):([A-Z]+)(\d+)", text)
-        single_m = _re.fullmatch(r"([A-Z]+)(\d+)", text)
-        if range_m:
-            c1 = formula.col_letters_to_index(range_m.group(1))
-            r1 = int(range_m.group(2)) - 1
-            c2 = formula.col_letters_to_index(range_m.group(3))
-            r2 = int(range_m.group(4)) - 1
-            box = (min(r1,r2), min(c1,c2), max(r1,r2), max(c1,c2))
+        """Name Box: khi Enter, nhảy tới địa chỉ gõ vào.
+
+        Hỗ trợ ``A1`` / ``A1:C5`` / ``A:A`` / ``1:1`` (xem
+        ``formula.parse_grid_reference``). Tham chiếu sai -> hộp thoại kiểu
+        Excel, giữ nguyên ô đang chọn.
+        """
+        box = formula.parse_grid_reference(
+            self.name_box.text(), self.model.rowCount(), self.model.columnCount()
+        )
+        if box is None:
+            QMessageBox.warning(self, APP_NAME, tr("name_box_invalid_ref"))
+            # Khôi phục địa chỉ ô hiện tại trong Name Box.
+            cur = self.view.currentIndex()
+            if cur.isValid():
+                self.name_box.setText(
+                    formula.col_index_to_letters(cur.column()) + str(cur.row() + 1)
+                )
+            self.name_box.selectAll()
+            return
+        top, left, bottom, right = box
+        if (top, left) == (bottom, right):
+            idx = self.model.index(top, left)
+            self.view.setCurrentIndex(idx)
+            self.view.scrollTo(idx)
+        else:
             self.view.select_box(box)
-            self.view.scrollTo(self.model.index(box[0], box[1]))
-        elif single_m:
-            col = formula.col_letters_to_index(single_m.group(1))
-            row = int(single_m.group(2)) - 1
-            idx = self.model.index(row, col)
-            if idx.isValid():
-                self.view.setCurrentIndex(idx)
-                self.view.scrollTo(idx)
+            self.view.scrollTo(self.model.index(top, left))
         self.view.setFocus()
 
     # ------------------------------------------------------------ status bar thống kê

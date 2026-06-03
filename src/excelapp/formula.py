@@ -86,6 +86,105 @@ def parse_cell_ref(ref: str) -> tuple[int, int]:
     return row, col
 
 
+# Regex cho Name Box "Go To" — compile once ở module level (hot path khi user gõ).
+# Cho phép '$' tùy ý (Excel chấp nhận $A$1 trong Name Box), không phân biệt hoa thường.
+_NB_CELL = r"\$?[A-Za-z]+\$?\d+"
+_NB_COL = r"\$?[A-Za-z]+"
+_NB_ROW = r"\$?\d+"
+_NB_CELL_RANGE_RE = re.compile(rf"^({_NB_CELL}):({_NB_CELL})$")
+_NB_COL_RANGE_RE = re.compile(rf"^({_NB_COL}):({_NB_COL})$")
+_NB_ROW_RANGE_RE = re.compile(rf"^({_NB_ROW}):({_NB_ROW})$")
+_NB_SINGLE_RE = re.compile(rf"^({_NB_CELL})$")
+# Tách cột/hàng từ một ô — dùng lại _CELL_RE (cùng pattern $?col$?row).
+_NB_CELL_PARTS_RE = _CELL_RE
+
+
+def _nb_col_index(token: str) -> int:
+    """'$AB' / 'ab' -> chỉ số cột 0-based."""
+    return col_letters_to_index(token.lstrip("$"))
+
+
+def _nb_row_index(token: str) -> int:
+    """'$10' / '10' -> chỉ số hàng 0-based."""
+    return int(token.lstrip("$")) - 1
+
+
+def parse_grid_reference(
+    text: str, n_rows: int, n_cols: int
+) -> tuple[int, int, int, int] | None:
+    """Phân tích chuỗi Name Box thành vùng chọn ``(top, left, bottom, right)``.
+
+    Hỗ trợ (không phân biệt hoa thường, bỏ khoảng trắng hai đầu, chấp nhận '$'):
+      - Ô đơn:        ``A1``  ``$A$1``
+      - Vùng ô:       ``A1:C5``  (tự chuẩn hóa nếu đảo ngược ``C5:A1``)
+      - Cả cột:       ``A:A``  ``A:C``   -> mọi hàng
+      - Cả hàng:      ``1:1``  ``2:5``   -> mọi cột
+
+    Trả về box đã kẹp trong lưới ``n_rows × n_cols``; ``None`` nếu cú pháp sai
+    hoặc tham chiếu nằm hoàn toàn ngoài lưới (caller hiện hộp thoại lỗi).
+
+    Hàm thuần (không phụ thuộc Qt) — kiểm thử headless được. Named range &
+    multi-range (``A1:B3,D5``) chưa hỗ trợ ở bản này (cần Spec 31 + lớp vẽ
+    đa vùng) — sẽ bổ sung ở Phase sau.
+    """
+    if not text:
+        return None
+    s = text.strip()
+    if not s:
+        return None
+    last = n_rows - 1
+    last_col = n_cols - 1
+    if last < 0 or last_col < 0:
+        return None
+
+    m = _NB_CELL_RANGE_RE.match(s)
+    if m:
+        m1 = _NB_CELL_PARTS_RE.match(m.group(1))
+        m2 = _NB_CELL_PARTS_RE.match(m.group(2))
+        if not m1 or not m2:
+            return None
+        c1 = col_letters_to_index(m1.group(1))
+        r1 = int(m1.group(2)) - 1
+        c2 = col_letters_to_index(m2.group(1))
+        r2 = int(m2.group(2)) - 1
+        return _nb_clamp(min(r1, r2), min(c1, c2), max(r1, r2), max(c1, c2), last, last_col)
+
+    m = _NB_COL_RANGE_RE.match(s)
+    if m:
+        c1 = _nb_col_index(m.group(1))
+        c2 = _nb_col_index(m.group(2))
+        return _nb_clamp(0, min(c1, c2), last, max(c1, c2), last, last_col)
+
+    m = _NB_ROW_RANGE_RE.match(s)
+    if m:
+        r1 = _nb_row_index(m.group(1))
+        r2 = _nb_row_index(m.group(2))
+        return _nb_clamp(min(r1, r2), 0, max(r1, r2), last_col, last, last_col)
+
+    m = _NB_SINGLE_RE.match(s)
+    if m:
+        mp = _NB_CELL_PARTS_RE.match(m.group(1))
+        if not mp:
+            return None
+        col = col_letters_to_index(mp.group(1))
+        row = int(mp.group(2)) - 1
+        return _nb_clamp(row, col, row, col, last, last_col)
+
+    return None
+
+
+def _nb_clamp(
+    top: int, left: int, bottom: int, right: int, last_row: int, last_col: int
+) -> tuple[int, int, int, int] | None:
+    """Kẹp box vào lưới; trả None nếu phần đầu vùng đã vượt ngoài lưới hẳn."""
+    # top/left vượt lưới => tham chiếu vô nghĩa (Excel báo lỗi, không cuộn tới đâu).
+    if top > last_row or left > last_col or top < 0 or left < 0:
+        return None
+    bottom = min(bottom, last_row)
+    right = min(right, last_col)
+    return (top, left, bottom, right)
+
+
 # ---------------------------------------------------------------- tokenizer
 
 _TOKEN_RE = re.compile(

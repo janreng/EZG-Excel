@@ -6,6 +6,26 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.1] - 2026-06-03
+
+### Thêm mới
+- **Name Box "Go To" kiểu Excel** (Spec 04, Phase 1):
+  - Gõ địa chỉ vào Name Box rồi Enter để nhảy tới: ô đơn `A1`/`$A$1`,
+    vùng ô `A1:C5` (tự chuẩn hóa nếu đảo ngược `C5:A1`), cả cột `A:A`/`A:C`,
+    cả hàng `1:1`/`2:5`. Không phân biệt hoa thường, chấp nhận dấu `$`.
+  - Tham chiếu vượt lưới được kẹp về biên; tham chiếu sai cú pháp hoặc nằm
+    hoàn toàn ngoài lưới → hộp thoại "Tham chiếu không hợp lệ.", giữ nguyên ô
+    đang chọn.
+  - **F5** và **Ctrl+G** = Go To: đưa con trỏ vào Name Box và bôi đen sẵn.
+  - **Esc** trong Name Box: bỏ chỉnh sửa, khôi phục địa chỉ ô, trả focus về lưới.
+  - Bộ phân tích tham chiếu (`formula.parse_grid_reference`) là hàm thuần,
+    regex compile-once (không cấp phát thừa trên hot path), 25 unit test.
+
+### Ghi chú
+- Named range, vùng rời rạc (`A1:B3,D5`) và tham chiếu chéo sheet (`Sheet2!A1`)
+  trong Name Box: dời sang Phase sau (cần Spec 31 + lớp vẽ đa vùng + multi-sheet).
+  Hiện các dạng này hiển thị hộp thoại lỗi thay vì crash.
+
 ## [0.12.0] - 2026-06-02
 
 ### Thêm mới

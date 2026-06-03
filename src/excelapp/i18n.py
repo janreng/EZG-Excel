@@ -184,6 +184,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "sheet_name": {"vi": "Tên sheet:", "en": "Sheet name:"},
     "sheet_dup": {"vi": "Tên sheet đã tồn tại", "en": "Sheet name already exists"},
     "sheet_min": {"vi": "Phải còn ít nhất một sheet", "en": "At least one sheet is required"},
+    # --- Name Box / Go To ---
+    "name_box_invalid_ref": {
+        "vi": "Tham chiếu không hợp lệ.",
+        "en": "Reference is not valid.",
+    },
     # --- định dạng có điều kiện ---
     "cond_tip": {"vi": "Định dạng có điều kiện", "en": "Conditional formatting"},
     "cond_add": {"vi": "Thêm quy tắc...", "en": "Add rule..."},
