@@ -39,6 +39,8 @@ STRINGS: dict[str, dict[str, str]] = {
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
+    "insert_date": {"vi": "Chèn ngày hôm nay", "en": "Insert current date"},
+    "insert_time": {"vi": "Chèn giờ hiện tại", "en": "Insert current time"},
     "show_formulas": {"vi": "Hiện công thức", "en": "Show Formulas"},
     "zoom_reset_tip": {
         "vi": "Mức phóng to — bấm để về 100% (Ctrl + lăn chuột để phóng)",

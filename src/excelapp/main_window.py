@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSettings, Qt, QThread, Signal
@@ -863,6 +864,14 @@ class MainWindow(QMainWindow):
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
         self._add_action(data_menu, tr("autosum"), self._autosum, QKeySequence("Alt+="))
+        self._add_action(
+            data_menu, tr("insert_date"), lambda: self._insert_now("date"),
+            QKeySequence("Ctrl+;"),
+        )
+        self._add_action(
+            data_menu, tr("insert_time"), lambda: self._insert_now("time"),
+            QKeySequence("Ctrl+Shift+;"),
+        )
         data_menu.addSeparator()
         self._cmd_action(data_menu, "find", self.show_find)
         self._cmd_action(data_menu, "replace", self.show_replace)
@@ -1402,6 +1411,20 @@ class MainWindow(QMainWindow):
     def _toggle_show_formulas(self, on: bool) -> None:
         """Ctrl+` — bật/tắt hiện công thức gốc thay vì kết quả trên toàn sheet."""
         self.model.set_show_formulas(on)
+
+    def _insert_now(self, kind: str, now: datetime | None = None) -> None:
+        """Chèn ngày (Ctrl+;) hoặc giờ (Ctrl+Shift+;) hiện tại — giá trị tĩnh.
+
+        ``now`` để tiêm thời gian cố định khi kiểm thử.
+        """
+        idx = self.view.currentIndex()
+        if not idx.isValid():
+            return
+        now = now or datetime.now()
+        text = now.strftime("%d/%m/%Y") if kind == "date" else now.strftime("%H:%M")
+        self.model.setData(idx, text, Qt.EditRole)
+        self.formula_edit.setText(text)
+        self.view.setFocus()
 
     # ------------------------------------------------------------ thao tác tệp
     def new_file(self) -> None:

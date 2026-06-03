@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.12.9] - 2026-06-03
+
+### Thêm mới
+- **Chèn ngày / giờ hiện tại**: nhấn **Ctrl+;** để chèn ngày hôm nay, **Ctrl+Shift+;**
+  để chèn giờ hiện tại vào ô đang chọn (giá trị tĩnh, như Excel). Cũng có trong
+  menu Dữ liệu.
+
 ## [0.12.8] - 2026-06-03
 
 ### Thêm mới
