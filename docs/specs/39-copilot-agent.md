@@ -37,32 +37,62 @@ AI assistant tích hợp sâu vào Excel theo cập nhật 2024-2025: side pane 
    - User: Apply / Modify / Discard
 3. Apply → actually executes via internal API + adds to undo stack.
 
-## 39.2 COPILOT Function (2025)
+## 39.2 COPILOT Function (Excel 365 2025+)
 
-`=COPILOT(prompt, [context_range], [model])` — LLM directly in formula:
+Excel signature thực: `=COPILOT(prompt_part1, [context1], [prompt_part2], [context2], ...)` — prompt và context **đan xen nhau**, có thể spill mảng động, **không có tham số model**. Hiện ở kênh Frontier/Insider, giới hạn ~100 lần gọi / 10 phút.
 
 ### Examples
 - `=COPILOT("Translate to English: " & A1)` — translate cell A1.
-- `=COPILOT("Sentiment of: " & A1, , "haiku")` — classify sentiment.
+- `=COPILOT("Sentiment of: " & A1)` — classify sentiment.
 - `=COPILOT("Summarize this paragraph", A1:A10)` — summarize multi-cell.
 - `=COPILOT("Extract phone number: " & A1)` — entity extraction.
 
 ### Properties
-- Async: cell hiện `#LOADING` while waiting; auto-update khi response.
+- Async: cell hiện `#BUSY!` while waiting; auto-update khi response. (`#BUSY!` là lỗi async thật của Excel; KHÔNG có `#LOADING`.)
 - Cache: same prompt → cached response (giảm cost).
 - Cost meter: Status Bar hiển thị token usage.
 - Rate limit handling.
 
-### Model parameter
-- `"sonnet"` / `"haiku"` / `"opus"` (Anthropic models) — 2025 Excel có option Claude.
-- `"gpt-4o"` / `"gpt-4o-mini"` (OpenAI default).
-- Default lấy từ Settings.
+### Model Selector — ⚠ CHƯA xác minh / đặc thù Ezcel
+> Excel/Copilot **không** công bố UI cho user chọn model LLM — Microsoft quản lý
+> phía sau. Phần dưới là **suy đoán + thiết kế riêng Ezcel**, tên/version model chỉ
+> là placeholder, đừng hard-code như fact Excel. Việc cho chọn provider
+> (Anthropic / OpenAI) là tính năng đặc thù Ezcel; danh sách thật lấy từ runtime.
+
+### Ezcel design (riêng — không phải Excel API)
+Ezcel có thể chọn cho thêm tham số model cuối formula cho convenience:
+- `=COPILOT(prompt, [context], [model_id])` — `model_id` = string optional.
+- Nhưng KHUYẾN NGHỊ giữ tương thích Excel: model qua Settings, không qua formula.
 
 ## 39.3 Agent Mode (2025-2026)
 
 **Update T1/2026:** Agent Mode **generally available** trên Excel Windows + Excel for Web (Dec 2025) + Excel Mac (rollout T1/2026). Excel for Web có full Power Query experience tích hợp với Agent.
 
-**Dec 2025 update:** Copilot Chat khả dụng trong **modern workbooks lưu local** (không cần OneDrive).
+**Dec 2025:** Copilot Chat khả dụng trong **modern workbooks lưu local** (không cần OneDrive).
+
+**Feb 2026:** Agent Mode + Copilot Chat query **locally stored Excel files** trên Windows + Mac; mở rộng cho user **EU** (Current Channel + Monthly Enterprise Channel).
+
+**March 2026:** **Edit with Copilot** GA (M365 Copilot license) — Copilot trực tiếp chỉnh sửa cells/range mà không cần Agent plan; hỗ trợ full standard Copilot languages (50+); Claude Opus 4.6 trong model selector (M365 Premium / Enterprise).
+
+**April 2026:**
+- **Edit with Copilot** thêm: Chat/Edit switcher, step-by-step reasoning hiển thị, "Understand changes" panel review diff.
+- **Python in Edit with Copilot**: Copilot dùng Python in-place cho advanced analysis (transform, visualization, multi-step) — không cần leave workbook.
+- Model selector: GPT-5.5, Claude Opus 4.7 mới.
+- Comments pane redesign (mobile-first): thread dễ tìm/đọc/act ([Spec 26](26-comments-notes.md)).
+
+**May 2026:**
+- **Copilot entry points consolidated**: chỉ còn 2 entry chính trên Windows + Mac (giảm clutter). Sau feedback tiêu cực, Microsoft **cho phép restore Copilot vào ribbon** thay vì chỉ trên canvas.
+- **Copilot panel dock option**: reposition panel khi đang work.
+- **Smart suggestions** + **refreshed keyboard shortcuts** (keyboard-first design).
+- **=COPILOT web search**: Excel Insiders Windows/Mac + Frontier customers web — `=COPILOT()` có thể search web và ground results từ live data.
+- **Show Changes card** Excel for Web: Copilot edits attribute trong Show Changes (transparency).
+- **Microsoft 365 Copilot new design** (May 28 2026): unified design language across Word/Excel/PowerPoint Copilot panes.
+
+**June 2026:**
+- **Agentic capabilities GA**: Copilot agentic plan-execute-refine multi-step work GA trên Word + Excel + PowerPoint (theo April 22 2026 announcement, rollout WW June).
+- **Copilot Notebooks → Excel agent**: tạo Excel spreadsheet trực tiếp từ Copilot Notebook (rolled out Frontier May → WW June).
+- **=COPILOT web search + live data grounding** GA — enrich table với current info, lookup company details, pull benchmarks từ formula.
+- **Show Changes** improvement: collaborator change with Copilot → Show Changes card có **Copilot attribution indicator** (visual flag + Copilot icon).
 
 Multi-step autonomous task — Copilot lập kế hoạch + thực thi nhiều action liên tiếp.
 
@@ -140,7 +170,7 @@ def apply_cf(range_addr: str, rule_type: str, condition: dict, format: dict):
 
 ### Async + UI
 - LLM call trong thread (không block UI).
-- Cell value `#LOADING` while waiting.
+- Cell value `#BUSY!` while waiting (lỗi async thật của Excel; không có `#LOADING`).
 - Stream response → update pane progressively.
 
 ## Acceptance criteria

@@ -5,11 +5,11 @@ Formula engine không chỉ tính đúng mà còn UX đầy đủ: Function Wiza
 
 ## Trạng thái hiện tại
 - ✓ Tokenizer + parser recursive-descent (`formula.py`).
-- ✓ **~120 hàm vô hướng** (v0.11.3 thêm Information/Logical/Text/Lookup/
+- ✓ **~120 hàm vô hướng** (v0.12.0 thêm Information/Logical/Text/Lookup/
   Math-Trig/Stats/Date — xem CHANGELOG & `tests/test_formula_v0113.py`).
   Quyết định scope: chỉ thêm hàm vô hướng, **chưa** kèm metadata cho Function
   Wizard (nợ Phase 4) và **chưa** spill/dynamic array (Phase 6).
-- ✓ **Mã lỗi kiểu Excel** (v0.11.3): engine raise & hiển thị 6 mã
+- ✓ **Mã lỗi kiểu Excel** (v0.12.0): engine raise & hiển thị 6 mã
   `#DIV/0! #N/A #VALUE! #NUM! #NAME? #REF!` (xem bảng §12.3).
 - ✓ `offset_formula` cho fill-down/right.
 - ✓ Cache `_eval_cache` per cell.
@@ -62,13 +62,13 @@ Sau khi chọn OK:
 
 | Error | Trạng thái | Nguyên nhân | Fix |
 |---|---|---|---|
-| `#DIV/0!` | ✓ (v0.11.3) | Mẫu số = 0 (ô trống ở **mẫu số** coi như 0; ô trống ở tử số = 0, không lỗi) | `IF(B1=0,0,A1/B1)` hoặc `IFERROR` |
-| `#VALUE!` | ✓ (v0.11.3) | Sai kiểu (số + text), giá trị không hữu hạn | `VALUE()`, check type |
-| `#REF!` | ✓ (v0.11.3) | Tham chiếu/chỉ số ngoài phạm vi (vd `INDEX` quá biên) | Update formula |
-| `#NAME?` | ✓ (v0.11.3) | Tên hàm không tồn tại (phần *Named Range* chờ Phase 1) | Check spelling |
+| `#DIV/0!` | ✓ (v0.12.0) | Mẫu số = 0 (ô trống ở **mẫu số** coi như 0; ô trống ở tử số = 0, không lỗi) | `IF(B1=0,0,A1/B1)` hoặc `IFERROR` |
+| `#VALUE!` | ✓ (v0.12.0) | Sai kiểu (số + text), giá trị không hữu hạn | `VALUE()`, check type |
+| `#REF!` | ✓ (v0.12.0) | Tham chiếu/chỉ số ngoài phạm vi (vd `INDEX` quá biên) | Update formula |
+| `#NAME?` | ✓ (v0.12.0) | Tên hàm không tồn tại (phần *Named Range* chờ Phase 1) | Check spelling |
 | `#NULL!` | ✗ chưa | Cần toán tử giao vùng (space) — tokenizer chưa hỗ trợ | — |
-| `#NUM!` | ✓ (v0.11.3) | Số không hợp lệ (`SQRT(-1)`), kết quả quá lớn (`FACT(171)`, overflow) | Check input |
-| `#N/A` | ✓ (v0.11.3) | VLOOKUP/MATCH/XLOOKUP miss, `NA()` | `IFERROR` / `IFNA` |
+| `#NUM!` | ✓ (v0.12.0) | Số không hợp lệ (`SQRT(-1)`), kết quả quá lớn (`FACT(171)`, overflow) | Check input |
+| `#N/A` | ✓ (v0.12.0) | VLOOKUP/MATCH/XLOOKUP miss, `NA()` | `IFERROR` / `IFNA` |
 | `#SPILL!` | ✗ chưa | Cần dynamic array / spill (Phase 6) | — |
 | `#CALC!` | ✗ chưa | Cần dynamic array (Phase 6) | — |
 | `#GETTING_DATA` | ✗ chưa | Cần external data | — |
@@ -169,7 +169,7 @@ Sau khi chọn OK:
 
 ## Acceptance criteria
 
-### A. Đã đo được & ĐÃ ship (v0.11.3 — `tests/test_formula_v0113.py`)
+### A. Đã đo được & ĐÃ ship (v0.12.0 — `tests/test_formula_v0113.py`)
 Phần engine/hàm vô hướng (không UX) — chạy `python -m pytest tests/`:
 - A1. `=XLOOKUP("banana",B1:B4,A1:A4)` đúng; reverse `search_mode=-1` trả match cuối; `match_mode` -1/1 (gần nhỏ/lớn hơn); miss không `if_not_found` → `#N/A`.
 - A2. `=EOMONTH(DATE(2024,2,15),0)` → 29 (năm nhuận); `=EDATE(DATE(2024,1,31),1)` → 29/02.

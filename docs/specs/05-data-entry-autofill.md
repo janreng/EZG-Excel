@@ -35,7 +35,7 @@ Xem [03 Cell Modes](03-cell-modes.md).
 | Drag | AutoFill theo pattern |
 | Double-click | Fill xuống đến cuối data liền kề (cột bên cạnh phải có data) |
 | Right-click + drag | Menu sau khi thả: Copy Cells / Fill Series / Fill Formatting Only / Fill Without Formatting / Fill Days/Weekdays/Months/Years |
-| Ctrl + drag | Force copy (không tạo series) |
+| Ctrl + drag (fill handle) | **Đảo** hành vi mặc định theo loại seed: số đơn (vd `1`) → **tạo series** 1,2,3…; seed kiểu series (ngày, "Mon", "Q1") → **ép copy**. (Khác với Ctrl+drag trên *viền* selection = copy khối — xem dòng dưới.) |
 
 ### Pattern recognition
 | Input | Pattern | Fill |

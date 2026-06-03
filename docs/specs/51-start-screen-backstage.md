@@ -73,22 +73,23 @@ Khi user mở Ezcel KHÔNG kèm file argument, hiển thị Start Screen full wi
 
 Click File button (góc trên trái ribbon) → toàn cửa sổ chuyển sang Backstage view (giống Word/PowerPoint Office 365).
 
-### Sidebar tabs
+### Sidebar tabs (Excel 365 modern)
 1. **Home** — same as Start Screen Home.
 2. **New** — templates gallery.
 3. **Open** — recent + browse.
 4. **Info** — current workbook properties + protection + accessibility check.
 5. **Save** — quick save (Ctrl+S).
 6. **Save As** — save to OneDrive / This PC / file picker.
-7. **Save as Adobe PDF** — direct PDF export (nếu có Acrobat) hoặc bỏ.
-8. **Print** — [Spec 24](24-print-page-setup.md).
-9. **Share** — [Spec 44](44-collaboration-version-history.md) (stub).
-10. **Export** — Create PDF/XPS / Change File Type.
-11. **Publish** — to OneDrive / SharePoint (stub).
-12. **Close** — close workbook (Ctrl+W).
-13. **Account** — user info, license, theme.
-14. **Feedback** — issue report.
-15. **Options** — Settings dialog.
+7. **Print** — [Spec 24](24-print-page-setup.md).
+8. **Share** — [Spec 44](44-collaboration-version-history.md) (stub).
+9. **Export** — Create PDF/XPS / Change File Type.
+10. **Publish** — to OneDrive / SharePoint (stub).
+11. **Close** — close workbook (Ctrl+W).
+12. **Account** — user info, license, theme.
+13. **Feedback** — issue report.
+14. **Options** — Settings dialog.
+
+> "Save as Adobe PDF" KHÔNG phải tab chuẩn — chỉ xuất hiện nếu user cài Adobe Acrobat Pro add-in. Bỏ khỏi Ezcel.
 
 ### Info tab — Current Workbook
 ```
@@ -168,7 +169,7 @@ Click File button (góc trên trái ribbon) → toàn cửa sổ chuyển sang B
 │  • Use system setting                                   │
 │ ──────────────────────────────────────────────────────│
 │ Product Information                                     │
-│  Ezcel v0.11.2                                          │
+│  Ezcel v0.12.1                                          │
 │  License: MIT                                           │
 │  [Check for Updates]                                    │
 └─────────────────────────────────────────────────────────┘

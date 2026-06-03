@@ -13,20 +13,32 @@ Implement đúng state machine 4 mode của Excel. **Đây là gốc rễ của 
 ## State machine (§3.1)
 
 ```
-                     ┌─────────────────────────┐
-                     │                         │
-                     ▼                         │
-   ┌───────┐  type   ┌───────┐  F2     ┌──────┐
-   │ READY │────────▶│ ENTER │────────▶│ EDIT │
-   └───────┘         └───────┘         └──────┘
-       ▲                 │  =+-*/         │
-       │                 ▼  + arrow       ▼  F2
-       │            ┌───────┐         ┌───────┐
-       │   commit   │ POINT │◀────────│ POINT │
-       │            └───────┘         └───────┘
-       │                 │
-       └─────────────────┴── Enter/Tab (commit) | Esc (cancel)
+   ┌──────────┐
+   │  READY   │◀──────────────────────────── Enter/Tab/click (commit)
+   └────┬─────┘                              ←────────── Esc (cancel)
+        │  type / =                                          │
+        ▼                                                    │
+   ┌──────────┐  =/+/-/*//  +  arrow/click   ┌──────────┐    │
+   │  ENTER   │ ─────────────────────────▶  │  POINT   │    │
+   │  (new)   │ ◀───── type non-operator ── │          │    │
+   └────┬─────┘                              └────┬─────┘    │
+        │ F2                                      │ F2       │
+        ▼                                          ▼          │
+   ┌──────────┐  F2                          ┌──────────┐    │
+   │  EDIT    │ ────────────────────────▶   │  POINT   │    │
+   │ (exist.) │ ◀─── arrow/click in formula  │  (edit)  │    │
+   └────┬─────┘                              └────┬─────┘    │
+        │                                         │           │
+        └────────── commit / Esc ─────────────────┴───────────┘
 ```
+
+**Transitions chính xác:**
+- READY → ENTER: gõ ký tự bất kỳ (cell trống) hoặc `=`/`+`/`-` để start formula.
+- READY → EDIT: F2 / double-click cell **có data** / click Formula Bar text.
+- ENTER ↔ POINT: trong ENTER có formula, gõ operator (`=`/`+`/`-`/`*`/`/`) rồi nhấn arrow → vào POINT; trong POINT gõ non-operator/digit → quay lại ENTER.
+- EDIT ↔ POINT: tương tự nhưng với existing formula.
+- POINT → Esc → READY: một lần Esc **hủy toàn bộ chỉnh sửa** và khôi phục nội dung cũ của ô (Excel KHÔNG có bước "Esc hủy mỗi ref rồi giữ formula"; muốn xóa phần ref vừa gõ dùng Backspace).
+- Bất kỳ → READY + commit: Enter / Tab / click cell khác.
 
 ### Transitions
 
@@ -38,7 +50,7 @@ Implement đúng state machine 4 mode của Excel. **Đây là gốc rễ của 
 | ENTER → POINT | sau `=`/`+`/`-`/`*`/`/` → nhấn arrow hoặc click ô khác |
 | EDIT → POINT | F2 lần nữa |
 | POINT → EDIT | F2; click Formula Bar |
-| BẤT KỲ → READY | Esc (hủy thay đổi) |
+| BẤT KỲ (Enter/Edit/Point) → READY | Esc — **hủy toàn bộ chỉnh sửa**, khôi phục giá trị cũ của ô (một lần Esc, mọi mode đang sửa) |
 | BẤT KỲ → READY + commit | Enter / Tab / click ô khác |
 
 ## Keyboard behavior trong từng mode (§3.2)
@@ -48,7 +60,7 @@ Implement đúng state machine 4 mode của Excel. **Đây là gốc rễ của 
 | Arrow ↑↓←→ | Di chuyển active cell | Commit + di chuyển | Di chuyển cursor trong ô | Chọn cell tham chiếu / mở rộng |
 | Enter | Xuống 1 ô | Commit + xuống 1 | Commit + xuống 1 | Kết thúc selection ref |
 | Tab | Sang phải | Commit + phải | Commit + phải | — |
-| Escape | — | Hủy, khôi phục giá trị cũ | Hủy, khôi phục | Hủy ref, về Edit |
+| Escape | — | Hủy, khôi phục giá trị cũ | Hủy, khôi phục | Hủy cả edit → Ready, khôi phục ô |
 | Delete/Backspace | Xóa nội dung ô | Xóa ký tự | Xóa ký tự tại cursor | — |
 | F2 | → Edit | → Edit (giữ nội dung) | → Point | → Edit |
 | Ctrl+Z | Undo | Undo trong formula | Undo gõ | — |
