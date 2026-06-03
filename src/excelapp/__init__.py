@@ -1,4 +1,4 @@
 """Ezcel — ứng dụng bảng tính đơn giản đọc/ghi CSV và XLSX."""
 
-__version__ = "0.14.0"
+__version__ = "0.14.1"
 APP_NAME = "Ezcel"

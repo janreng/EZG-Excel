@@ -195,6 +195,7 @@ class MainWindow(QMainWindow):
         self._cell_mode = CellMode.READY  # Spec 03 — khởi tạo sớm trước khi nối signal
         self._stat_items = self._load_stat_items()  # Spec 11.2 — item nào hiện ở status bar
         self._filters: dict[int, set] = {}  # cột -> tập giá trị được phép hiện
+        self._manual_hidden_rows: set[int] = set()  # dòng người dùng tự ẩn (giữ qua sort/lọc)
 
         if os.path.exists(icon_path()):
             self.setWindowIcon(QIcon(icon_path()))
@@ -889,6 +890,10 @@ class MainWindow(QMainWindow):
         struct_menu.addSeparator()
         self._add_action(struct_menu, tr("delete_row"), self.delete_row)
         self._add_action(struct_menu, tr("delete_col"), self.delete_col)
+        struct_menu.addSeparator()
+        self._add_action(struct_menu, tr("hide_rows"), self.hide_rows)
+        self._add_action(struct_menu, tr("hide_cols"), self.hide_cols)
+        self._add_action(struct_menu, tr("unhide"), self.unhide_selection)
 
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
@@ -1169,6 +1174,10 @@ class MainWindow(QMainWindow):
         self._add_action(menu, tr("insert_col_right"), self.insert_col_right)
         self._add_action(menu, tr("delete_row"), self.delete_row)
         self._add_action(menu, tr("delete_col"), self.delete_col)
+        menu.addSeparator()
+        self._add_action(menu, tr("hide_rows"), self.hide_rows)
+        self._add_action(menu, tr("hide_cols"), self.hide_cols)
+        self._add_action(menu, tr("unhide"), self.unhide_selection)
         menu.addSeparator()
         self._add_action(menu, tr("clear"), self.clear_selection)
         menu.exec(self.view.viewport().mapToGlobal(pos))
@@ -1578,6 +1587,38 @@ class MainWindow(QMainWindow):
         if col >= 0 and not self.model.removeColumns(col, 1):
             self.statusBar().showMessage(tr("cannot_delete_col"), 3000)
 
+    # ------------------------------------------------------------ ẩn / hiện dòng-cột
+    def _selected_rows_cols(self):
+        """(tập dòng, tập cột) thuộc các vùng đang chọn."""
+        rows, cols = set(), set()
+        for top, left, bottom, right in self._selection_ranges():
+            rows.update(range(top, bottom + 1))
+            cols.update(range(left, right + 1))
+        return rows, cols
+
+    def hide_rows(self) -> None:
+        rows, _ = self._selected_rows_cols()
+        for r in rows:
+            self._manual_hidden_rows.add(r)
+            self.view.setRowHidden(r, True)
+        self.view.viewport().update()
+
+    def hide_cols(self) -> None:
+        _, cols = self._selected_rows_cols()
+        for c in cols:
+            self.view.setColumnHidden(c, True)
+        self.view.viewport().update()
+
+    def unhide_selection(self) -> None:
+        """Hiện lại mọi dòng/cột đang ẩn nằm trong vùng chọn (kể cả khoảng giữa)."""
+        rows, cols = self._selected_rows_cols()
+        for r in rows:
+            self._manual_hidden_rows.discard(r)
+            self.view.setRowHidden(r, False)
+        for c in cols:
+            self.view.setColumnHidden(c, False)
+        self.view.viewport().update()
+
     # ------------------------------------------------------------ điền (fill)
     def _selection_box(self):
         # Lấy bounding-box theo *range* (O(số vùng)) thay vì duyệt từng ô —
@@ -1980,13 +2021,15 @@ class MainWindow(QMainWindow):
                 str(self.model.data(self.model.index(r, col), Qt.DisplayRole) or "") in allowed
                 for col, allowed in self._filters.items()
             )
-            self.view.setRowHidden(r, not visible)
+            # Giữ dòng người dùng tự ẩn — không bị sort/lọc làm hiện lại.
+            self.view.setRowHidden(r, (not visible) or r in self._manual_hidden_rows)
         self.view.horizontalHeader().refresh(set(self._filters.keys()))
         self.view.viewport().update()
 
     def _unhide_all(self) -> None:
+        # Bỏ ẩn do lọc, nhưng giữ những dòng người dùng tự ẩn.
         for r in range(self.model.rowCount()):
-            self.view.setRowHidden(r, False)
+            self.view.setRowHidden(r, r in self._manual_hidden_rows)
         self.view.viewport().update()
 
     def clear_filters(self) -> None:

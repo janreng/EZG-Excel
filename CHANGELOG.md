@@ -6,6 +6,13 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.14.1] - 2026-06-03
+
+### Thêm mới
+- **Ẩn / Hiện dòng & cột**: chọn dòng/cột rồi **Ẩn dòng** / **Ẩn cột** để giấu đi;
+  chọn vùng trùm phần đang ẩn rồi **Hiện lại** để cho hiện trở lại. Có trong menu
+  Cấu trúc và menu chuột phải. (Trạng thái ẩn không lưu vào tệp.)
+
 ## [0.14.0] - 2026-06-03
 
 ### Thêm mới

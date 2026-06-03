@@ -36,6 +36,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "insert_col_right": {"vi": "Chèn cột bên phải", "en": "Insert column right"},
     "delete_row": {"vi": "Xóa dòng", "en": "Delete row"},
     "delete_col": {"vi": "Xóa cột", "en": "Delete column"},
+    "hide_rows": {"vi": "Ẩn dòng", "en": "Hide rows"},
+    "hide_cols": {"vi": "Ẩn cột", "en": "Hide columns"},
+    "unhide": {"vi": "Hiện lại (trong vùng chọn)", "en": "Unhide (in selection)"},
     # --- menu: Dữ liệu ---
     "menu_data": {"vi": "&Dữ liệu", "en": "&Data"},
     "autosum": {"vi": "Tự động tính tổng (AutoSum)", "en": "AutoSum"},
