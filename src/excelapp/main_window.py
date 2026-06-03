@@ -55,6 +55,7 @@ from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
 from . import statusbar_stats as sbstats
 from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
+from .format_dialog import FormatCellsDialog
 from .freeze import FreezeManager
 from .i18n import current_lang, load_lang, set_lang, tr
 from .icons import make_icon
@@ -822,6 +823,28 @@ class MainWindow(QMainWindow):
                 for r in range(box[0], box[2] + 1):
                     self.view.resizeRowToContents(r)
 
+    def show_format_cells(self) -> None:
+        """Hộp thoại Định dạng ô (Ctrl+1) — 6 tab, áp cho mọi vùng đang chọn."""
+        boxes = self._selection_ranges()
+        if not boxes:
+            return
+        cur = self.view.currentIndex()
+        fmt = self.model.get_format(cur.row(), cur.column()) if cur.isValid() else {}
+        sample = self.model.cell_value(cur.row(), cur.column()) if cur.isValid() else None
+        dlg = FormatCellsDialog(self, fmt, sample_value=sample)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        changes = dlg.changes()
+        kind = dlg.border_kind()
+        if not changes and kind is None:
+            return
+        # Một lần OK = một bước undo: gộp định dạng + viền chung.
+        self.model.apply_format_and_border(boxes, changes, border_kind=kind)
+        if "wrap" in changes:
+            for box in boxes:
+                for r in range(box[0], box[2] + 1):
+                    self.view.resizeRowToContents(r)
+
     def _build_menu(self) -> None:
         menubar = self.menuBar()
         menubar.clear()
@@ -850,6 +873,11 @@ class MainWindow(QMainWindow):
         edit_menu.addSeparator()
         self._cmd_action(edit_menu, "fill_down", self.fill_down)
         self._cmd_action(edit_menu, "fill_right", self.fill_right)
+        edit_menu.addSeparator()
+        self._add_action(
+            edit_menu, tr("format_cells"), self.show_format_cells,
+            QKeySequence("Ctrl+1"),
+        )
 
         # --- Cấu trúc ---
         struct_menu = menubar.addMenu(tr("menu_structure"))

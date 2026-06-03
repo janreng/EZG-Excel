@@ -20,6 +20,8 @@ from . import formula
 _FORMAT_KEYS = (
     "font", "size", "bold", "italic", "underline", "strike",
     "halign", "valign", "wrap", "bg", "color", "border", "number_format",
+    # Bảo vệ ô — lưu sẵn, có hiệu lực khi bật Bảo vệ trang tính (Spec 29).
+    "locked", "hidden",
 )
 
 _HALIGN = {
@@ -472,21 +474,70 @@ class SpreadsheetModel(QAbstractTableModel):
         """Như :meth:`set_format` nhưng cho nhiều vùng rời (Ctrl+Click) trong MỘT
         bước undo. Các vùng rời nhau nên không đụng key ô nào."""
         attrs = {k: v for k, v in attrs.items() if k in _FORMAT_KEYS}
-        if not attrs:
-            return
+        if attrs:
+            self.apply_format_and_border(boxes, attrs)
+
+    @staticmethod
+    def _with_attrs(fmt: dict, attrs: dict) -> dict:
+        """Bản sao fmt sau khi đặt/xóa thuộc tính (v=None -> xóa key)."""
+        new = dict(fmt)
+        for k, v in attrs.items():
+            if v is None:
+                new.pop(k, None)
+            else:
+                new[k] = v
+        return new
+
+    @staticmethod
+    def _with_border(fmt: dict, r: int, c: int,
+                     box: tuple[int, int, int, int], kind: str, color: str) -> dict:
+        """Bản sao fmt sau khi áp viền 'kind' cho ô (r,c) theo vị trí trong box."""
+        top, left, bottom, right = box
+        new = dict(fmt)
+        b = dict(new.get("border") or {})
+        if kind == "none":
+            b = {}
+        elif kind == "all":
+            b = {s: color for s in ("top", "bottom", "left", "right")}
+        elif kind == "outer":
+            if r == top:
+                b["top"] = color
+            if r == bottom:
+                b["bottom"] = color
+            if c == left:
+                b["left"] = color
+            if c == right:
+                b["right"] = color
+        elif kind in ("top", "bottom", "left", "right"):
+            edge = {"top": r == top, "bottom": r == bottom,
+                    "left": c == left, "right": c == right}[kind]
+            if edge:
+                b[kind] = color
+        if b:
+            new["border"] = b
+        else:
+            new.pop("border", None)
+        return new
+
+    def apply_format_and_border(self, boxes, attrs: dict | None = None,
+                                border_kind: str | None = None,
+                                border_color: str = "#000000") -> None:
+        """Áp định dạng + (tuỳ chọn) viền cho nhiều vùng trong MỘT bước undo.
+
+        Dùng cho hộp thoại Định dạng ô (Ctrl+1): bấm OK 1 lần -> Ctrl+Z 1 lần.
+        """
+        attrs = {k: v for k, v in (attrs or {}).items() if k in _FORMAT_KEYS}
         cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
-        for (top, left, bottom, right) in boxes:
+        for box in boxes:
+            top, left, bottom, right = box
             for r in range(top, bottom + 1):
                 for c in range(left, right + 1):
-                    old_fmt = dict(self._fmt.get((r, c), {}))
-                    new_fmt = dict(old_fmt)
-                    for k, v in attrs.items():
-                        if v is None:
-                            new_fmt.pop(k, None)
-                        else:
-                            new_fmt[k] = v
-                    if new_fmt != old_fmt:
-                        cell_fmts[(r, c)] = (old_fmt, new_fmt)
+                    old = dict(self._fmt.get((r, c), {}))
+                    new = self._with_attrs(old, attrs) if attrs else dict(old)
+                    if border_kind is not None:
+                        new = self._with_border(new, r, c, box, border_kind, border_color)
+                    if new != old:
+                        cell_fmts[(r, c)] = (old, new)
         self._apply_fmt_changes(cell_fmts)
 
     def _apply_fmt_changes(
@@ -519,38 +570,7 @@ class SpreadsheetModel(QAbstractTableModel):
     def set_border_ranges(self, boxes, kind: str, color: str = "#000000") -> None:
         """Như :meth:`set_border` nhưng cho nhiều vùng rời, gộp 1 bước undo.
         Mỗi vùng tự tính mép ngoài của riêng nó (outer/top/bottom...)."""
-        cell_fmts: dict[tuple[int, int], tuple[dict, dict]] = {}
-        for (top, left, bottom, right) in boxes:
-            for r in range(top, bottom + 1):
-                for c in range(left, right + 1):
-                    old = dict(self._fmt.get((r, c), {}))
-                    new = dict(old)
-                    b = dict(new.get("border") or {})
-                    if kind == "none":
-                        b = {}
-                    elif kind == "all":
-                        b = {s: color for s in ("top", "bottom", "left", "right")}
-                    elif kind == "outer":
-                        if r == top:
-                            b["top"] = color
-                        if r == bottom:
-                            b["bottom"] = color
-                        if c == left:
-                            b["left"] = color
-                        if c == right:
-                            b["right"] = color
-                    elif kind in ("top", "bottom", "left", "right"):
-                        edge = {"top": r == top, "bottom": r == bottom,
-                                "left": c == left, "right": c == right}[kind]
-                        if edge:
-                            b[kind] = color
-                    if b:
-                        new["border"] = b
-                    else:
-                        new.pop("border", None)
-                    if new != old:
-                        cell_fmts[(r, c)] = (old, new)
-        self._apply_fmt_changes(cell_fmts)
+        self.apply_format_and_border(boxes, border_kind=kind, border_color=color)
 
     def get_format(self, row: int, col: int) -> dict:
         """Định dạng của một ô (rỗng nếu mặc định)."""

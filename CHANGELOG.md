@@ -6,6 +6,20 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.13.0] - 2026-06-03
+
+### Thêm mới
+- **Hộp thoại Định dạng ô (Ctrl+1)** kiểu Excel với 6 thẻ: **Số, Căn lề, Phông chữ,
+  Viền, Tô màu, Bảo vệ**. Gộp mọi tùy chọn định dạng vào một chỗ:
+  - Thẻ **Số**: chọn thể loại (Số, Phần trăm, Tiền VND/USD, Ngày, Giờ, Khoa học…),
+    chỉnh số chữ số thập phân, dấu phân tách hàng nghìn, mã tùy chỉnh — có ô **xem
+    trước** kết quả ngay.
+  - Thẻ **Căn lề / Phông chữ / Tô màu**: căn ngang–dọc, xuống dòng, phông, cỡ chữ,
+    in đậm/nghiêng/gạch, màu chữ, màu nền.
+  - Thẻ **Viền**: chọn kiểu viền áp cho vùng.
+  - Thẻ **Bảo vệ**: đánh dấu Khóa ô / Ẩn công thức (có hiệu lực khi bật bảo vệ trang).
+  - Bấm **OK một lần = hoàn tác một lần (Ctrl+Z)**, áp cho mọi vùng đang chọn.
+
 ## [0.12.10] - 2026-06-03
 
 ### Thêm mới
