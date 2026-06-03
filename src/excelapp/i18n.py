@@ -55,6 +55,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "table_overlap": {"vi": "Vùng chồng lấn bảng có sẵn", "en": "Range overlaps an existing table"},
     "not_in_table": {"vi": "Ô không nằm trong bảng nào", "en": "Cell is not in a table"},
     "total_label": {"vi": "Tổng", "en": "Total"},
+    "flash_fill": {"vi": "Flash Fill (Ctrl+E)", "en": "Flash Fill (Ctrl+E)"},
+    "flash_no_source": {"vi": "Cần một cột dữ liệu bên trái để suy mẫu.", "en": "Need a source column to the left."},
+    "flash_need_example": {"vi": "Hãy gõ ít nhất một ví dụ ở cột này trước.", "en": "Type at least one example in this column first."},
+    "flash_no_pattern": {"vi": "Không suy được mẫu để điền.", "en": "Could not infer a fill pattern."},
+    "flash_done": {"vi": "Đã điền theo mẫu", "en": "Filled by example"},
     "total_row_busy": {
         "vi": "Dòng dưới bảng đang có dữ liệu — không thể thêm hàng Tổng.",
         "en": "The row below the table is not empty — cannot add a total row.",

@@ -1058,6 +1058,23 @@ class SpreadsheetModel(QAbstractTableModel):
             return formula.offset_formula(raw, top - src_anchor[0], left - src_anchor[1])
         return raw
 
+    def set_values(self, cells) -> None:
+        """Đặt giá trị nhiều ô rời trong MỘT bước undo. cells: iterable (row, col, value)."""
+        changes = [(r, c, self._data[r][c], str(v))
+                   for r, c, v in cells if self._data[r][c] != str(v)]
+        if not changes:
+            return
+        self._push_undo(("cells", changes))
+        for r, c, _o, n in changes:
+            self._data[r][c] = n
+        for r, c, _o, _n in changes:
+            self._update_deps(r, c)
+        self._recalc_cells({(r, c) for r, c, _o, _n in changes})
+        rs = [r for r, _, _, _ in changes]
+        cs = [c for _, c, _, _ in changes]
+        self.dataChanged.emit(self.index(min(rs), min(cs)), self.index(max(rs), max(cs)),
+                              [Qt.DisplayRole, Qt.EditRole])
+
     def clear_range(self, box: tuple[int, int, int, int]) -> None:
         self.clear_ranges([box])
 

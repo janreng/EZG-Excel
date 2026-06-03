@@ -56,6 +56,7 @@ from . import APP_NAME, __version__, formula, io_utils, shortcuts, updater
 from . import statusbar_stats as sbstats
 from .autosum import autosum_formula
 from .cell_mode import CellMode, ModeEvent, transition as mode_transition
+from .flash_fill import infer_and_fill
 from .format_dialog import FormatCellsDialog
 from .freeze import FreezeManager
 from .mini_toolbar import make_mini_toolbar
@@ -1024,6 +1025,8 @@ class MainWindow(QMainWindow):
         # --- Dữ liệu ---
         data_menu = menubar.addMenu(tr("menu_data"))
         self._add_action(data_menu, tr("autosum"), self._autosum, QKeySequence("Alt+="))
+        self._add_action(data_menu, tr("flash_fill"), self.flash_fill_command,
+                         QKeySequence("Ctrl+E"))
         self._add_action(
             data_menu, tr("insert_date"), lambda: self._insert_now("date"),
             QKeySequence("Ctrl+;"),
@@ -1844,6 +1847,45 @@ class MainWindow(QMainWindow):
         _, cols = self._selected_rows_cols()
         if cols and self._outline.toggle_overlapping("col", min(cols), max(cols)):
             self._apply_col_visibility()
+
+    # ------------------------------------------------------------ Flash Fill (Ctrl+E)
+    def flash_fill_command(self) -> None:
+        """Ctrl+E: suy mẫu từ ví dụ đã gõ ở cột hiện tại rồi điền nốt theo cột bên trái."""
+        idx = self.view.currentIndex()
+        if not idx.isValid():
+            return
+        row, col = idx.row(), idx.column()
+        if col == 0:
+            self.statusBar().showMessage(tr("flash_no_source"), 3000)
+            return
+        src_col = col - 1
+
+        def disp(r, c):
+            return str(self.model.data(self.model.index(r, c), Qt.DisplayRole) or "")
+
+        top = row
+        while top - 1 >= 0 and disp(top - 1, src_col) != "":
+            top -= 1
+        bottom = row
+        while bottom + 1 < self.model.rowCount() and disp(bottom + 1, src_col) != "":
+            bottom += 1
+        rows = list(range(top, bottom + 1))
+        sources = [disp(r, src_col) for r in rows]
+        examples = {k: disp(rows[k], col) for k in range(len(rows)) if disp(rows[k], col) != ""}
+        if not examples:
+            self.statusBar().showMessage(tr("flash_need_example"), 3000)
+            return
+        result = infer_and_fill(sources, examples)
+        if result is None:
+            self.statusBar().showMessage(tr("flash_no_pattern"), 3000)
+            return
+        to_fill = [(rows[k], col, result[k]) for k in range(len(rows))
+                   if disp(rows[k], col) == "" and result[k] != ""]
+        if not to_fill:
+            self.statusBar().showMessage(tr("flash_no_pattern"), 3000)
+            return
+        self.model.set_values(to_fill)
+        self.statusBar().showMessage(tr("flash_done"), 2000)
 
     # ------------------------------------------------------------ Bảng (Ctrl+T)
     def _active_tables(self) -> TableModel:

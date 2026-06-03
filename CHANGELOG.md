@@ -6,6 +6,14 @@ phiên bản theo [SemVer].
 [Keep a Changelog]: https://keepachangelog.com/vi/1.0.0/
 [SemVer]: https://semver.org/lang/vi/
 
+## [0.19.0] - 2026-06-03
+
+### Thêm mới
+- **Tự điền theo mẫu (Flash Fill — Ctrl+E)**: gõ một (hoặc vài) ví dụ kết quả ở
+  cột bên cạnh dữ liệu, rồi nhấn **Ctrl+E** — ứng dụng tự suy ra cách biến đổi
+  (tách/ghép chữ, đổi thứ tự, in hoa/thường…) và điền nốt các dòng còn lại. Nếu
+  không suy được mẫu nhất quán thì không điền (tránh điền sai).
+
 ## [0.18.1] - 2026-06-03
 
 ### Thêm mới
